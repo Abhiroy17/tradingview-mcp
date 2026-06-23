@@ -6070,6 +6070,11 @@ server.listen(PORT, () => {
           await tg.sendScanSummary(results, now);
         });
 
+        tg.onFetchDigest(async () => {
+          const result = await fetchMunafaTipsSymbols();
+          return { symbols: result?.symbols || [] };
+        });
+
         tg.onStatusRequest(async () => ({
           scanning: scannerEnabled || matrixScannerEnabled,
           watchlistCount: watchlist.length,

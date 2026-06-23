@@ -124,11 +124,23 @@ class TelegramService {
       }
     });
 
-    bot.command('digest', ctx => {
+    bot.command('digest', async ctx => {
       if (!this._isTrustedChat(ctx)) return;
       if (this.lastDigestSymbols.length === 0) {
-        ctx.reply('No morning digest available yet.');
-        return;
+        if (this._onFetchDigest) {
+          ctx.reply('⏳ Fetching symbols from Munafasutra…');
+          try {
+            const result = await this._onFetchDigest();
+            this.lastDigestSymbols = result?.symbols || [];
+          } catch (err) {
+            ctx.reply(`❌ Failed to fetch: ${err.message}`);
+            return;
+          }
+        }
+        if (this.lastDigestSymbols.length === 0) {
+          ctx.reply('No symbols available from Munafasutra right now. Try again later.');
+          return;
+        }
       }
       ctx.replyWithMarkdown(this._formatDigest(this.lastDigestSymbols, new Date().toLocaleDateString('en-IN')));
     });
@@ -328,6 +340,14 @@ class TelegramService {
    */
   onStatusRequest(fn) {
     this._onStatusRequest = fn;
+  }
+
+  /**
+   * Register callback for on-demand /digest fetch — dashboard.js provides Munafa fetch.
+   * @param {Function} fn - async () => { symbols: string[] }
+   */
+  onFetchDigest(fn) {
+    this._onFetchDigest = fn;
   }
 }
 
