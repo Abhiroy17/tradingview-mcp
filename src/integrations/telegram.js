@@ -235,7 +235,7 @@ class TelegramService {
    */
   async sendPriceAlert(alert) {
     if (!this.ready) return;
-    const symbol = alert.symbol || 'Unknown';
+    const symbol = this._escape(alert.symbol || 'Unknown');
     const cond = alert.condition?.toUpperCase() || 'CROSSED';
     const text = [
       `🔔 *Price Alert: ${symbol}*`,
@@ -320,8 +320,11 @@ class TelegramService {
   }
 
   _escape(text) {
-    // Escape Markdown special chars for Telegram Markdown v1
-    return String(text).replace(/[_*[\]()~`>#+=|{}.!-]/g, c => `\\${c}`);
+    // Telegram Markdown v1 does NOT support backslash escaping — replace problematic chars
+    return String(text)
+      .replace(/_/g, '-')   // underscores in strategy codes (ema_rsi_intraday → ema-rsi-intraday)
+      .replace(/\*/g, '')   // strip asterisks
+      .replace(/`/g, "'");  // backticks → apostrophe
   }
 
   // ── Callback Registration ───────────────────────────────────────────────────
