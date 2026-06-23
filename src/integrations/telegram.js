@@ -54,7 +54,12 @@ class TelegramService {
 
     // Launch in polling mode — works everywhere including headless cloud
     try {
-      await this.bot.launch();
+      // launch() returns a Promise that resolves only when the bot stops — do not await
+      this.bot.launch().catch(err => {
+        console.error('[telegram] Polling error:', err.message);
+        this.ready = false;
+      });
+      await new Promise(r => setTimeout(r, 1500));
       this.ready = true;
       console.log('[telegram] Bot launched and polling');
       return true;

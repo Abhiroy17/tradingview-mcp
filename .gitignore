@@ -16,3 +16,7 @@ briefing_*.json
 .env
 .env.local
 .env.*.local
+*.key
+*.pem
+personal
+personal.pub
