@@ -1,0 +1,222 @@
+//@version=6
+// Phoenix Force [India — INTRADAY]  (PSAR + EMA stack + MACD + RSI + Choppiness)
+// ─────────────────────────────────────────────────────────────────
+// PURPOSE: 4-factor confluence intraday momentum strategy for liquid Indian
+// stocks. Long when PSAR + trend stack + MACD + RSI agree AND market is
+// trending (Choppiness Index < threshold). Short on the inverse — F&O futures
+// only (cash-segment shorts not allowed in India).
+//
+// USE THIS ON: 5m / 15m / 30m intraday timeframes
+// IDEAL UNIVERSE: NSE F&O stocks, NIFTY components, mid-cap movers
+// HOLDING PERIOD: Minutes to a few hours — ALL positions square-off at 15:15 IST
+// EXPECTED SETUPS: 0-3 trades/day depending on stock + TF (4-factor is selective)
+//
+// ── Improvements vs original v4 script ──
+//   1. Pine v6 syntax (was v4 — sunset for new scripts)
+//   2. Choppiness threshold tightened: 38 (was 50) — true trending only
+//   3. RSI(14) instead of RSI(7) — less whipsaw on intraday
+//   4. Realistic intraday TP/SL: 1.0%/0.6% (was 3%/3% — never hit on 15m)
+//   5. ATR-adaptive stops option — % stops fail on volatile mid-caps (AGIINFRA)
+//   6. Volume filter — entry needs > 1.3× SMA20 (was none)
+//   7. Volatility floor — skip dead sessions (ATR % < threshold)
+//   8. Entry window 09:30-14:30 IST — skip opening 15min + last hour
+//   9. Force square-off at 15:15 IST — 10-15min buffer before broker auto-close
+//  10. Skip Thursday 14:00+ — F&O weekly expiry pin distorts entries
+//  11. F&O-only short flag — cash shorts illegal on Indian equity day-trading
+//  12. Per-stock parameter presets (see comments below input section)
+//
+// ── Per-stock recommended presets (15m TF) ──
+//   AGIINFRA (mid-cap, ~3-5% ATR):  TP=1.5  SL=1.0  rsi_th=55  ci_th=38  atr_floor=0.4
+//   SHILPAMED (pharma volatile):    TP=1.2  SL=0.8  rsi_th=55  ci_th=38  atr_floor=0.3
+//   MCX (F&O large-cap, ~2% ATR):   TP=1.0  SL=0.6  rsi_th=53  ci_th=40  atr_floor=0.25
+//   KAYNES (tech mid-cap, high β):  TP=1.5  SL=0.9  rsi_th=55  ci_th=38  atr_floor=0.35
+//   SBIN (F&O large-cap, ~1% ATR):  TP=0.6  SL=0.4  rsi_th=52  ci_th=42  atr_floor=0.15
+//
+//   For SBIN / MCX prefer 5m TF (slow movers need finer granularity).
+//   For AGIINFRA / KAYNES / SHILPAMED stick to 15m (mid-caps need filtered noise).
+
+strategy("Phoenix Force [India — Intraday]",
+     overlay              = true,
+     calc_on_every_tick   = false,
+     pyramiding           = 0,
+     default_qty_type     = strategy.percent_of_equity,
+     default_qty_value    = 5,
+     initial_capital      = 100000,
+     commission_type      = strategy.commission.percent,
+     commission_value     = 0.05,
+     slippage             = 3,
+     process_orders_on_close = true)
+
+// Warn if not used on intraday TF
+if barstate.islastconfirmedhistory and not timeframe.isintraday
+    runtime.error("Phoenix Force [India — Intraday] is intraday-only. " +
+                  "Use 5m, 15m, or 30m timeframe.")
+
+// ───────────────────────── Risk Inputs ────────────────────────────
+tp_pct   = input.float(1.0, "Take Profit %",    step=0.1, minval=0.2, maxval=10, group="Risk")
+sl_pct   = input.float(0.6, "Stop Loss %",      step=0.1, minval=0.2, maxval=10, group="Risk")
+use_atr_stop = input.bool(false, "Use ATR-Adaptive Stops", group="Risk",
+     tooltip="Replace fixed % SL with ATR multiple. Better for volatile mid-caps.")
+atr_sl_mult  = input.float(1.5, "ATR SL Multiplier", step=0.1, minval=0.5, group="Risk")
+atr_tp_mult  = input.float(2.5, "ATR TP Multiplier", step=0.1, minval=1.0, group="Risk")
+
+// ─────────────────────── Indicator Inputs ─────────────────────────
+psar_start = input.float(0.02, "PSAR Start", step=0.01, minval=0.01, group="Indicators")
+psar_inc   = input.float(0.02, "PSAR Increment", step=0.01, minval=0.01, group="Indicators")
+psar_max   = input.float(0.20, "PSAR Max", step=0.05, minval=0.05, group="Indicators")
+
+ma_len   = input.int(50,  "Trend MA Length", minval=10, maxval=400, group="Indicators",
+     tooltip="50 EMA aligned with intraday trend. Original was 200-SMA — too slow for 15m.")
+
+macd_fast = input.int(12, "MACD Fast", minval=2, group="Indicators")
+macd_slow = input.int(26, "MACD Slow", minval=5, group="Indicators")
+macd_sig  = input.int(9,  "MACD Signal", minval=2, group="Indicators")
+
+rsi_len  = input.int(14, "RSI Length",  minval=2, maxval=50, group="Indicators",
+     tooltip="14 (was 7). Shorter RSI whipsaws on intraday noise.")
+rsi_long_th  = input.int(53, "RSI Long Threshold (≥)",  minval=40, maxval=70, group="Indicators")
+rsi_short_th = input.int(47, "RSI Short Threshold (≤)", minval=30, maxval=60, group="Indicators")
+
+ci_len   = input.int(14, "Choppiness Index Length", minval=5, maxval=50, group="Indicators",
+     tooltip="Standard CI length is 14 (was 7). Stable trending readings.")
+ci_th    = input.float(38, "Choppiness Threshold (<)", step=1, minval=20, maxval=61.8, group="Indicators",
+     tooltip="CI < 38.2 = strong trend, CI > 61.8 = ranging. Original used 50 (too loose).")
+
+// ───────────────────────── Filters ────────────────────────────────
+use_volume    = input.bool(true, "Volume Filter", group="Filters")
+vol_mult      = input.float(1.3, "Volume Multiplier (×SMA20)", step=0.1, minval=0, maxval=5, group="Filters",
+     tooltip="Bar volume must exceed SMA20 by this factor. 1.3 catches genuine moves.")
+
+use_volatility = input.bool(true, "ATR Volatility Floor", group="Filters")
+atr_floor_pct  = input.float(0.25, "Min ATR % of Price", step=0.05, minval=0.05, group="Filters",
+     tooltip="Skip dead chop sessions. AGIINFRA needs 0.4, SBIN 0.15.")
+
+use_liquidity = input.bool(true, "Liquidity Filter", group="Filters")
+min_turnover_lac = input.float(50, "Min Avg Turnover (₹ Lac/bar)", step=10, group="Filters",
+     tooltip="Default ₹50 Lac/bar. Increase to 100+ for top-50 F&O liquidity.")
+
+skip_thursday_pm = input.bool(true, "Skip Thursday 14:00+ (F&O Expiry Pin)", group="Filters")
+
+// ───────────────────────── Direction Inputs ───────────────────────
+allow_longs  = input.bool(true,  "Allow Longs",  group="Direction")
+allow_shorts = input.bool(false, "Allow Shorts (F&O Futures only)", group="Direction",
+     tooltip="Indian cash equity day-trading does NOT allow shorts. Enable ONLY when " +
+             "applied to a futures contract (e.g. SBIN1!, MCX1!).")
+
+// ───────────────────────── Session Inputs ─────────────────────────
+i_marketSession    = input.session("0915-1525", "NSE Market Session", group="Session",
+     tooltip="Full NSE intraday window. Entries blocked outside.")
+entry_window       = input.session("0930-1430", "Entry Window (IST)", group="Session",
+     tooltip="Allowed entry times. Default skips first 15min + last 60min.")
+square_off_window  = input.session("1515-1525", "Force Square-Off Window", group="Session",
+     tooltip="All positions force-closed during this window. 10-15min buffer before broker auto-close.")
+
+// ───────────────────────── Calculations ───────────────────────────
+ist_tz       = "Asia/Kolkata"
+in_session   = not na(time(timeframe.period, i_marketSession,   ist_tz))
+in_entry_win = not na(time(timeframe.period, entry_window,      ist_tz))
+in_squareoff = not na(time(timeframe.period, square_off_window, ist_tz))
+is_thursday_pm = dayofweek(time, ist_tz) == dayofweek.thursday and hour(time, ist_tz) >= 14
+
+// PSAR
+psar_val = ta.sar(psar_start, psar_inc, psar_max)
+c1_long  = close > psar_val
+c1_short = close < psar_val
+
+// Trend MA (using EMA — more responsive than SMA on intraday)
+trend_ma = ta.ema(close, ma_len)
+c2_long  = close > trend_ma
+c2_short = close < trend_ma
+
+// MACD
+[macdLine, _signalLine, _hist] = ta.macd(close, macd_fast, macd_slow, macd_sig)
+c3_long  = macdLine >= 0
+c3_short = macdLine <= 0
+
+// RSI (with hysteresis bands instead of single 50 threshold)
+rsi_val  = ta.rsi(close, rsi_len)
+c4_long  = rsi_val >= rsi_long_th
+c4_short = rsi_val <= rsi_short_th
+
+// Choppiness Index — standard formula
+atr1     = ta.atr(1)
+ci_high  = ta.highest(high, ci_len)
+ci_low   = ta.lowest(low, ci_len)
+ci_range = ci_high - ci_low
+ci       = ci_range > 0 ? 100 * math.log10(math.sum(atr1, ci_len) / ci_range) / math.log10(ci_len) : 50.0
+trending = ci < ci_th
+
+// Volume / volatility / liquidity filters
+vol_sma     = ta.sma(volume, 20)
+volume_ok   = not use_volume     or volume > vol_sma * vol_mult
+atr14       = ta.atr(14)
+atr_pct     = atr14 / close * 100
+volatility_ok = not use_volatility or atr_pct >= atr_floor_pct
+turnover_bar  = volume * close
+turnover_sma  = ta.sma(turnover_bar, 20)
+liquidity_ok  = not use_liquidity  or turnover_sma >= (min_turnover_lac * 100000)
+thursday_ok   = not skip_thursday_pm or not is_thursday_pm
+
+// Aggregate confluence
+buy_setup  = c1_long  and c2_long  and c3_long  and c4_long
+sell_setup = c1_short and c2_short and c3_short and c4_short
+
+// ─────────────────────────────── Entry ────────────────────────────
+filters_pass = volume_ok and volatility_ok and liquidity_ok and thursday_ok and in_session and in_entry_win and not in_squareoff
+
+longCondition  = allow_longs  and buy_setup  and trending and filters_pass
+shortCondition = allow_shorts and sell_setup and trending and filters_pass
+
+if longCondition and strategy.position_size == 0
+    strategy.entry("PhoenixLong", strategy.long)
+
+if shortCondition and strategy.position_size == 0
+    strategy.entry("PhoenixShort", strategy.short)
+
+// ─────────────────────────── Exit Logic ───────────────────────────
+if strategy.position_size > 0
+    sl = use_atr_stop ? strategy.position_avg_price - atr14 * atr_sl_mult : strategy.position_avg_price * (1 - sl_pct / 100)
+    tp = use_atr_stop ? strategy.position_avg_price + atr14 * atr_tp_mult : strategy.position_avg_price * (1 + tp_pct / 100)
+    strategy.exit("Bracket-L", "PhoenixLong", stop=sl, limit=tp)
+
+if strategy.position_size < 0
+    sl = use_atr_stop ? strategy.position_avg_price + atr14 * atr_sl_mult : strategy.position_avg_price * (1 + sl_pct / 100)
+    tp = use_atr_stop ? strategy.position_avg_price - atr14 * atr_tp_mult : strategy.position_avg_price * (1 - tp_pct / 100)
+    strategy.exit("Bracket-S", "PhoenixShort", stop=sl, limit=tp)
+
+// Force square-off — broker MIS auto-close happens at 15:25-15:28, we exit at 15:15-15:25
+if in_squareoff and strategy.position_size != 0
+    strategy.close_all(comment="EOD")
+
+// ───────────────────────── Visualization ──────────────────────────
+plot(psar_val, "PSAR", style=plot.style_cross, color=color.new(color.orange, 30))
+plot(trend_ma, "Trend EMA", color=color.new(color.blue, 30), linewidth=2)
+
+// Filter pulse — orange tint when 4-factor confluence present but a filter blocks entry
+filter_blocked = (buy_setup or sell_setup) and trending and not filters_pass
+bgcolor(filter_blocked ? color.new(color.orange, 92) : na, title="Filter Blocked")
+bgcolor(in_squareoff   ? color.new(color.red,    94) : na, title="Square-Off Window")
+
+// Status table (top-right)
+var table info = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 80), border_width=1)
+if barstate.islast
+    table.cell(info, 0, 0, "Filter",     text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(info, 1, 0, "Status",     text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(info, 0, 1, "Session",    text_color=color.white)
+    table.cell(info, 1, 1, in_session   ? "✓" : "✗", text_color=in_session   ? color.green : color.red)
+    table.cell(info, 0, 2, "EntryWin",   text_color=color.white)
+    table.cell(info, 1, 2, in_entry_win ? "✓" : "✗", text_color=in_entry_win ? color.green : color.red)
+    table.cell(info, 0, 3, "Trend(CI)",  text_color=color.white)
+    table.cell(info, 1, 3, str.tostring(ci, "#.0") + (trending ? " ✓" : " ✗"), text_color=trending ? color.green : color.red)
+    table.cell(info, 0, 4, "Volume",     text_color=color.white)
+    table.cell(info, 1, 4, volume_ok    ? "✓" : "✗", text_color=volume_ok    ? color.green : color.red)
+    table.cell(info, 0, 5, "ATR%",       text_color=color.white)
+    table.cell(info, 1, 5, str.tostring(atr_pct, "#.##") + (volatility_ok ? " ✓" : " ✗"), text_color=volatility_ok ? color.green : color.red)
+    table.cell(info, 0, 6, "Liquidity",  text_color=color.white)
+    table.cell(info, 1, 6, liquidity_ok ? "✓" : "✗", text_color=liquidity_ok ? color.green : color.red)
+    table.cell(info, 0, 7, "Thu PM",     text_color=color.white)
+    table.cell(info, 1, 7, thursday_ok  ? "✓" : "✗", text_color=thursday_ok  ? color.green : color.red)
+    table.cell(info, 0, 8, "RSI",        text_color=color.white)
+    table.cell(info, 1, 8, str.tostring(rsi_val, "#.0"), text_color=color.white)
+    table.cell(info, 0, 9, "Mode",       text_color=color.white)
+    table.cell(info, 1, 9, allow_shorts ? "L+S" : "L-only", text_color=color.aqua)

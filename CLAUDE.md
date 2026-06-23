@@ -1,6 +1,31 @@
 # TradingView MCP — Claude Instructions
 
-68 tools for reading and controlling a live TradingView Desktop chart via CDP (port 9222).
+80 tools for reading and controlling a live TradingView Desktop chart via CDP (port 9222).
+
+## Strategy Backtesting & Optimization
+
+The repo also ships a backtesting engine tuned for Indian (NSE/BSE) markets with industry-grade rigor (walk-forward k-fold validation, multi-axis regime detection, India costs/session/slippage, futures shorting policy).
+
+**Production strategies** (Phase H tuned, registry: [src/engine/registry.js](src/engine/registry.js)):
+- `trend_200sma_positional` — Trend follower (1D/1W, long-only). Params: fastLen=20, volMult=1.5, tp=25, sl=12. Mid/small-cap +93-98%.
+- `ema_rsi_intraday` — Triple-EMA stack + RSI exit (15m/1h, both). Params: rsiExitLong=70, volMult=1, tp=3, sl=1.5, maxBars=48. Bank 9/10, IT 8/10 profitable.
+
+**Experimental strategies** (10): `rsi2_india_swing` (demoted Phase H), `fibonacci_india_swing` (demoted Phase H), `ibs_india_swing`, `ibs_india_intraday`, `overnight_swing`, `monday_reversal`, `ibs_mean_reversion`, `movingaverage_intraday`, `dual_movingaverage_intraday`, `supertrend_intraday`.
+
+**Reference docs**:
+- [docs/STRATEGIES.md](docs/STRATEGIES.md) — per-strategy rationale, params, validation results
+- [docs/INDIA-MARKET.md](docs/INDIA-MARKET.md) — NSE session, F&O expiry, costs, shorting rules
+
+**Tooling**:
+- `node scripts/tune-strategy.js <code>` — single-symbol walk-forward tuning
+- `node scripts/tune-multi.js <code>` — cross-symbol basket sweep (preferred for production)
+- `npm run test:engine` — registry + regimes + India session regression tests
+
+**Critical**:
+1. Pine is canonical. Any param change must update both `pdf/{profitable|untested}/<code>.pine` AND `src/engine/strategies/<code>.js`.
+2. `tunedParams` in registry are reference defaults from a single tuning run — production deployment of mean-reversion strategies REQUIRES per-symbol calibration.
+3. Trend strategies should be deployed as portfolio rotation, not single-stock signals.
+4. Regime gate (`execution.gateOnRegime: true`) is opt-in but recommended for production mean-reversion runs.
 
 ## Decision Tree — Which Tool When
 

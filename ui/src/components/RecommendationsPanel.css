@@ -1,0 +1,186 @@
+.recommendations-panel {
+  animation: fadeIn 0.3s ease-out 0.1s both;
+}
+
+.active-signal {
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+
+.buy-signal {
+  background: var(--green-bg);
+  border: 1px solid rgba(38, 166, 154, 0.3);
+}
+
+.signal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.signal-badge {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.signal-badge.buy {
+  background: var(--green);
+  color: #fff;
+}
+
+.signal-badge.sell {
+  background: var(--red);
+  color: #fff;
+}
+
+.signal-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.signal-symbol {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.signal-prices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.price-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.price-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.price-value.entry {
+  color: var(--accent);
+}
+
+.price-value.target {
+  color: var(--green);
+}
+
+.price-value.stoploss {
+  color: var(--red);
+}
+
+.signal-strategy {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding-top: 8px;
+  border-top: 1px solid rgba(38, 166, 154, 0.2);
+}
+
+.no-signal {
+  text-align: center;
+  padding: 30px 20px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+
+.no-signal-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.no-signal p {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.no-signal-sub {
+  margin-top: 4px;
+  font-size: 11px !important;
+}
+
+.recent-recs {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.recs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.rec-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  animation: slideIn 0.3s ease-out;
+}
+
+.rec-item.buy { background: var(--green-bg); }
+.rec-item.sell, .rec-item.sl { background: var(--red-bg); }
+.rec-item.tp { background: var(--yellow-bg); }
+
+.rec-badge {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rec-badge.buy { background: var(--green); color: #fff; }
+.rec-badge.sell, .rec-badge.sl { background: var(--red); color: #fff; }
+.rec-badge.tp { background: var(--yellow); color: #000; }
+
+.rec-symbol {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.rec-msg {
+  flex: 1;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rec-time {
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+}

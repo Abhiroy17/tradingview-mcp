@@ -1,0 +1,183 @@
+.alerts-panel {
+  animation: fadeIn 0.3s ease-out 0.15s both;
+}
+
+.alerts-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.alert-total {
+  background: var(--accent);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.clear-btn {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-btn:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.alert-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.filter-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  border-color: var(--border-light);
+  color: var(--text-secondary);
+}
+
+.filter-btn.active {
+  border-color: var(--accent);
+  background: rgba(41, 98, 255, 0.1);
+  color: var(--accent);
+}
+
+.filter-btn.buy.active {
+  border-color: var(--green);
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.filter-btn.sell.active {
+  border-color: var(--red);
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.alerts-list {
+  max-height: 500px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alert-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  animation: slideIn 0.3s ease-out;
+  flex-wrap: wrap;
+}
+
+.alert-item.buy {
+  background: var(--green-bg);
+  border-left: 3px solid var(--green);
+}
+
+.alert-item.sell {
+  background: var(--red-bg);
+  border-left: 3px solid var(--red);
+}
+
+.alert-item.tp {
+  background: var(--yellow-bg);
+  border-left: 3px solid var(--yellow);
+}
+
+.alert-item.sl {
+  background: var(--red-bg);
+  border-left: 3px solid var(--red);
+}
+
+.alert-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.alert-type-badge {
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.alert-type-badge.buy { background: var(--green); color: #fff; }
+.alert-type-badge.sell, .alert-type-badge.sl { background: var(--red); color: #fff; }
+.alert-type-badge.tp { background: var(--yellow); color: #000; }
+
+.alert-symbol-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.alert-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-message {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.alert-right {
+  flex-shrink: 0;
+}
+
+.alert-timestamp {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-alerts {
+  text-align: center;
+  padding: 50px 20px;
+  color: var(--text-muted);
+}
+
+.empty-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.empty-alerts p {
+  font-size: 14px;
+}
+
+.empty-sub {
+  font-size: 12px !important;
+  margin-top: 4px;
+  color: var(--text-muted);
+}

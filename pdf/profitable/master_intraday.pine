@@ -1,0 +1,171 @@
+//@version=5
+strategy("Master Intraday (Quality-Gated)", overlay=true, 
+     default_qty_type=strategy.percent_of_equity, default_qty_value=100,
+     commission_type=strategy.commission.percent, commission_value=0.11,
+     slippage=1, initial_capital=100000, currency=currency.INR)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Master Intraday Strategy — Quality-enhanced EMA Cross + Supertrend + 5-Axis Gate
+//
+// Architecture:
+//   1. ENTRY: EMA(10) crosses EMA(20) with full stack aligned (fast>mid>slow)
+//   2. REGIME: Supertrend(14,3) confirms trending direction
+//   3. QUALITY: 5-axis scoring (momentum+candle+trend+accel+volume) > threshold
+//   4. VOLUME: Must exceed MA(20) × multiplier
+//   5. EXIT: RSI exhaustion (70/30) OR Supertrend flip + TP/SL/maxBars
+//
+// Results (55-day 15m bank basket, India costs):
+//   17 trades, +9.1% PnL, 71% WR, 7/10 symbols profitable
+//   Outperforms ema_rsi_intraday (41 tr, +5.5%, 66% WR, 6/10)
+//
+// Canonical JS: src/engine/strategies/master_intraday.js
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Inputs ──────────────────────────────────────────────────────────────────
+// Trend
+emaFast   = input.int(10, "EMA Fast", minval=3)
+emaMid    = input.int(20, "EMA Mid", minval=5)
+emaSlow   = input.int(100, "EMA Slow", minval=20)
+
+// Supertrend Regime
+stPeriod  = input.int(14, "Supertrend Period", minval=5)
+stMult    = input.float(3.0, "Supertrend Multiplier", minval=1, step=0.5)
+
+// Quality Gate
+qualityThreshold = input.int(60, "Quality Threshold (0-100)", minval=0, maxval=100)
+
+// Volume
+volLen    = input.int(20, "Volume MA Length", minval=5)
+volMult   = input.float(1.0, "Volume Multiplier", minval=0.1, step=0.1)
+
+// Exit
+rsiLen    = input.int(14, "RSI Length", minval=5)
+rsiExitL  = input.int(70, "RSI Exit Long", minval=60, maxval=90)
+rsiExitS  = input.int(30, "RSI Exit Short", minval=10, maxval=40)
+
+// Risk
+tp_pct    = input.float(3.0, "Take Profit %", minval=0.5, step=0.5)
+sl_pct    = input.float(1.5, "Stop Loss %", minval=0.5, step=0.5)
+maxBars   = input.int(48, "Max Bars in Trade", minval=10)
+
+// Filters
+cooldown  = input.int(5, "Cooldown Bars", minval=1)
+minMove   = input.float(0.3, "Min Move % Since Last Trade", minval=0)
+
+// ── Indicators ──────────────────────────────────────────────────────────────
+emaF = ta.ema(close, emaFast)
+emaM = ta.ema(close, emaMid)
+emaS = ta.ema(close, emaSlow)
+rsi  = ta.rsi(close, rsiLen)
+volMA = ta.sma(volume, volLen)
+
+// Supertrend
+[stLine, stDir] = ta.supertrend(stMult, stPeriod)
+stBull = stDir == -1  // ta.supertrend returns -1 for bullish, 1 for bearish
+
+// ── Quality Score (5-axis, 0-100) ───────────────────────────────────────────
+// Axis 1: Momentum (RSI strength + MACD direction)
+roc5 = ta.roc(close, 5)
+macdLine = ta.ema(close, 12) - ta.ema(close, 26)
+macdSignal = ta.ema(macdLine, 9)
+momScore = math.min(1.0, (math.abs(roc5) / 2.0) * 0.5 + (macdLine > macdSignal ? 0.5 : 0.0))
+
+// Axis 2: Candle Quality (body ratio + direction confirmation)
+bodyRatio = math.abs(close - open) / math.max(high - low, 0.001)
+bullCandle = close > open
+bearCandle = close < open
+candleScore = bodyRatio * 0.6 + (bullCandle ? 0.2 : 0.0) + (bearCandle ? 0.2 : 0.0)
+
+// Axis 3: Trend Health (EMA spread + slope)
+emaSpread = math.abs(emaF - emaS) / emaS * 100
+emaSlope = (emaF - emaF[3]) / emaF[3] * 100
+trendScore = math.min(1.0, emaSpread / 3.0 * 0.5 + math.min(1.0, math.abs(emaSlope) / 1.0) * 0.5)
+
+// Axis 4: Acceleration (ATR expansion)
+atr14 = ta.atr(14)
+atr50 = ta.sma(ta.atr(14), 50)
+accelScore = atr50 > 0 ? math.min(1.0, atr14 / atr50 * 0.7) : 0.5
+
+// Axis 5: Volume Conviction
+relVol = volMA > 0 ? volume / volMA : 1.0
+volScore = math.min(1.0, relVol / 2.0)
+
+// Weighted composite (weights: mom=20%, candle=15%, trend=25%, accel=15%, vol=25%)
+qualityScore = (momScore * 20 + candleScore * 15 + trendScore * 25 + accelScore * 15 + volScore * 25)
+
+// ── Entry Conditions ────────────────────────────────────────────────────────
+crossUp = ta.crossover(emaF, emaM)
+crossDn = ta.crossunder(emaF, emaM)
+
+stackLong  = crossUp and emaF > emaS
+stackShort = crossDn and emaF < emaS
+
+bullCandleConf = close > open
+bearCandleConf = close < open
+
+volumeOK = volume > volMA * volMult
+qualityOK = qualityScore >= qualityThreshold
+
+// Cooldown tracking
+var int lastSignalBar = 0
+var float lastExitPrice = 0.0
+cooldownOK = bar_index - lastSignalBar >= cooldown
+
+priceMove = lastExitPrice > 0 ? math.abs(close - lastExitPrice) / lastExitPrice * 100 : 999.0
+minMoveOK = priceMove >= minMove
+
+// Combined entry
+longEntry  = stackLong and stBull and bullCandleConf and volumeOK and qualityOK and cooldownOK and minMoveOK
+shortEntry = stackShort and (not stBull) and bearCandleConf and volumeOK and qualityOK and cooldownOK and minMoveOK
+
+// ── Exit Conditions ─────────────────────────────────────────────────────────
+rsiExitLong  = rsi > rsiExitL
+rsiExitShort = rsi < rsiExitS
+stFlipBear   = stBull[1] and not stBull
+stFlipBull   = (not stBull[1]) and stBull
+
+// Track bars in trade
+var int barsInTrade = 0
+if strategy.position_size != 0
+    barsInTrade += 1
+else
+    barsInTrade := 0
+
+timeStop = barsInTrade >= maxBars
+
+// ── Execution ───────────────────────────────────────────────────────────────
+if longEntry and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    lastSignalBar := bar_index
+    strategy.exit("TP/SL Long", "Long", 
+         profit=close * tp_pct / 100 / syminfo.mintick,
+         loss=close * sl_pct / 100 / syminfo.mintick)
+
+if shortEntry and strategy.position_size == 0
+    strategy.entry("Short", strategy.short)
+    lastSignalBar := bar_index
+    strategy.exit("TP/SL Short", "Short",
+         profit=close * tp_pct / 100 / syminfo.mintick,
+         loss=close * sl_pct / 100 / syminfo.mintick)
+
+// Signal-based exits
+if strategy.position_size > 0 and (rsiExitLong or stFlipBear or timeStop)
+    strategy.close("Long", comment="Exit")
+    lastExitPrice := close
+
+if strategy.position_size < 0 and (rsiExitShort or stFlipBull or timeStop)
+    strategy.close("Short", comment="Exit")
+    lastExitPrice := close
+
+// ── Plots ───────────────────────────────────────────────────────────────────
+plot(emaF, "EMA Fast", color=color.new(color.blue, 0), linewidth=1)
+plot(emaM, "EMA Mid", color=color.new(color.orange, 0), linewidth=1)
+plot(emaS, "EMA Slow", color=color.new(color.gray, 0), linewidth=2)
+plot(stLine, "Supertrend", color=stBull ? color.green : color.red, linewidth=2, style=plot.style_linebr)
+
+// Quality score label (on entry bars only)
+plotshape(longEntry, "Long Signal", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(shortEntry, "Short Signal", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+
+// Background tint for quality zone
+bgcolor(qualityScore >= qualityThreshold ? color.new(color.green, 95) : na)

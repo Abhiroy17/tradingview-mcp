@@ -14,16 +14,33 @@
   "scripts": {
     "start": "node src/server.js",
     "tv": "node src/cli/index.js",
-    "test": "node --test tests/e2e.test.js tests/pine_analyze.test.js",
+    "launch:tv": "cmd /c start \"\" \"C:\\Program Files\\WindowsApps\\TradingView.Desktop_3.2.0.7916_x64__n534cwy3pjxzj\\TradingView.exe\" --remote-debugging-port=9222",
+    "dashboard": "node scripts/kill-port.js 3456 && node dashboard.js",
+    "dashboard:dev": "node scripts/kill-port.js 3457 && cd ui && npm run dev",
+    "ui:build": "cd ui && npm run build",
+    "test": "node --test tests/e2e.test.js tests/pine_analyze.test.js tests/strategy-engine.test.js",
     "test:e2e": "node --test tests/e2e.test.js",
-    "test:unit": "node --test tests/pine_analyze.test.js tests/cli.test.js",
+    "test:unit": "node --test tests/pine_analyze.test.js tests/cli.test.js tests/strategy-engine.test.js",
+    "test:engine": "node --test tests/strategy-engine.test.js",
     "test:cli": "node --test tests/cli.test.js",
-    "test:all": "node --test tests/e2e.test.js tests/pine_analyze.test.js tests/cli.test.js",
-    "test:verbose": "node --test --test-reporter=spec tests/e2e.test.js tests/pine_analyze.test.js",
-    "test:count": "node --test --test-reporter=spec tests/e2e.test.js 2>&1 | tail -5"
+    "test:all": "node --test tests/e2e.test.js tests/pine_analyze.test.js tests/cli.test.js tests/strategy-engine.test.js",
+    "test:verbose": "node --test --test-reporter=spec tests/e2e.test.js tests/pine_analyze.test.js tests/strategy-engine.test.js",
+    "test:count": "node --test --test-reporter=spec tests/e2e.test.js 2>&1 | tail -5",
+    "providers:test": "node scripts/test-providers.js",
+    "engine:test": "node scripts/test-engine.js",
+    "upstox:auth": "node scripts/upstox-auth.js",
+    "upstox:instruments": "node scripts/upstox-instruments.js",
+    "db:migrate": "node scripts/db-migrate.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "chrome-remote-interface": "^0.33.2"
+    "chrome-remote-interface": "^0.33.2",
+    "dotenv": "^17.4.2",
+    "node-cron": "^4.5.0",
+    "p-limit": "^7.3.0",
+    "pg": "^8.21.0",
+    "telegraf": "^4.16.3",
+    "upstox-js-sdk": "^2.28.0",
+    "yahoo-finance2": "^3.15.3"
   }
 }

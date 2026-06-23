@@ -1,0 +1,87 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Pritesh-StocksDeveloper
+// Enhanced for Indian intraday: percentage TP/SL risk management + volume
+// confirmation + flip-based entries (was firing every bar above/below the line).
+// Mirrors src/engine/strategies/supertrend_intraday.js (Pine is canonical).
+
+//@version=6
+strategy("Supertrend - Intraday", overlay=true, calc_on_every_tick = false, pyramiding = 0,
+     default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
+     commission_type = strategy.commission.percent, commission_value = 0.03, slippage = 2)
+
+// ********** Strategy inputs - Start **********
+
+// Session: market start → intraday square-off time
+i_marketSession = input.session(title="Market session", defval="0915-1455", group="Session")
+
+i_multiplier = input.float(title = "Multiplier", defval = 4, step = 0.1, group="Supertrend")
+i_atrPeriod  = input.int(title = "ATR Period", defval = 14, group="Supertrend")
+
+// Risk management (percent of entry price)
+i_tpPct = input.float(title = "Take Profit %", defval = 2.0, minval = 0.1, step = 0.1, group="Risk")
+i_slPct = input.float(title = "Stop Loss %",   defval = 1.5, minval = 0.1, step = 0.1, group="Risk")
+
+// Filters
+i_volLen   = input.int(title = "Volume MA Length",   defval = 20, minval = 1, group="Filters")
+i_volMult  = input.float(title = "Volume Multiplier", defval = 1.0, minval = 0.0, step = 0.1, group="Filters")
+i_useShort = input.bool(title = "Allow Shorts", defval = true, group="Filters")
+
+// ********** Strategy inputs - End **********
+
+
+// ********** Supporting functions - Start **********
+
+// A function to check whether the bar or period is in intraday session
+barInSession(sess) => time(timeframe.period, sess) != 0
+
+// ********** Supporting functions - End **********
+
+
+// ********** Strategy - Start **********
+
+[superTrend, dir] = ta.supertrend(i_multiplier, i_atrPeriod)
+
+// Volume confirmation
+volMA = ta.sma(volume, i_volLen)
+volOK = volMA > 0 and volume > volMA * i_volMult
+
+colResistance = dir == 1 and dir == dir[1] ? color.new(color.red, 0) : color.new(color.red, 100)
+colSupport = dir == -1 and dir == dir[1] ? color.new(color.green, 0) : color.new(color.green, 100)
+
+plot(superTrend, color = colResistance, linewidth=2)
+plot(superTrend, color = colSupport, linewidth=2)
+
+// Long/short on the Supertrend FLIP (cross), not every bar above/below it
+longCondition  = ta.crossover(close, superTrend)  and volOK
+shortCondition = ta.crossunder(close, superTrend) and volOK
+
+// See if intraday session is active
+bool intradaySession = barInSession(i_marketSession)
+
+// ── Entries (only inside session) ────────────────────────────────────────
+if longCondition and intradaySession
+    strategy.entry(id = "Long", direction = strategy.long)
+
+if shortCondition and intradaySession and i_useShort
+    strategy.entry(id = "Short", direction = strategy.short)
+
+// ── Percentage TP/SL exits (no-op while flat: avg price is na) ────────────
+float longTP  = strategy.position_avg_price * (1 + i_tpPct / 100)
+float longSL  = strategy.position_avg_price * (1 - i_slPct / 100)
+float shortTP = strategy.position_avg_price * (1 - i_tpPct / 100)
+float shortSL = strategy.position_avg_price * (1 + i_slPct / 100)
+strategy.exit(id = "L-Exit", from_entry = "Long",  limit = longTP,  stop = longSL)
+strategy.exit(id = "S-Exit", from_entry = "Short", limit = shortTP, stop = shortSL)
+
+// Supertrend flip exit (regime change) — close opposite position
+if shortCondition and strategy.position_size > 0
+    strategy.close("Long", comment = "ST flip")
+if longCondition and strategy.position_size < 0
+    strategy.close("Short", comment = "ST flip")
+
+// ── Session square-off (when session is over and position is open) ───────
+squareOff = (not intradaySession) and (strategy.position_size != 0)
+if squareOff
+    strategy.close_all(comment = "Square-off")
+
+// ********** Strategy - End **********

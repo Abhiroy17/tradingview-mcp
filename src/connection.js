@@ -50,9 +50,16 @@ export function requireFinite(value, name) {
 export async function getClient() {
   if (client) {
     try {
-      // Quick liveness check
-      await client.Runtime.evaluate({ expression: '1', returnByValue: true });
-      return client;
+      // Liveness check — verify we're on the chart page with TradingViewApi
+      const check = await client.Runtime.evaluate({
+        expression: 'typeof window.TradingViewApi !== "undefined" && window.TradingViewApi._activeChartWidgetWV ? 1 : 0',
+        returnByValue: true,
+      });
+      if (check.result?.value === 1) return client;
+      // Connected but wrong page or API not ready — reconnect
+      try { await client.close(); } catch {}
+      client = null;
+      targetInfo = null;
     } catch {
       client = null;
       targetInfo = null;

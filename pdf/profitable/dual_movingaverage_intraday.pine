@@ -1,0 +1,84 @@
+//written by sixpathssenin
+// Enhanced for Indian intraday: session square-off (was missing — held overnight),
+// percentage TP/SL risk management + volume confirmation. Mirrors
+// src/engine/strategies/dual_movingaverage_intraday.js (Pine is canonical).
+//@version=6
+strategy(title="Dual Moving Average", shorttitle="Dual MA - Intraday", initial_capital=10000,
+     overlay=true, calc_on_every_tick = false, pyramiding = 0,
+     default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
+     commission_type = strategy.commission.percent, commission_value = 0.03, slippage = 2)
+
+// ── Session ──────────────────────────────────────────────────────────────
+i_marketSession = input.session(title="Market session", defval="0915-1455", group="Session")
+
+// ── Moving averages ──────────────────────────────────────────────────────
+i_fastLen = input.int(8,  "Fast MA", minval=1, group="Moving Averages")
+i_slowLen = input.int(21, "Slow MA", minval=1, group="Moving Averages")
+
+// ── Slope/angle filter ───────────────────────────────────────────────────
+angleCriteria = input.int(7,  "Angle",        minval=1, maxval=13, group="Angle")
+i_lookback    = input.int(2,  "Angle Period", minval=1,            group="Angle")
+i_atrPeriod   = input.int(10, "ATR Period",   minval=1,            group="Angle")
+i_crossWindow = input.int(15, "Cross Window", minval=1,            group="Angle")
+
+// ── Risk management (percent of entry price) ─────────────────────────────
+i_tpPct = input.float(1.5, "Take Profit %", minval=0.1, step=0.1, group="Risk")
+i_slPct = input.float(1.0, "Stop Loss %",   minval=0.1, step=0.1, group="Risk")
+
+// ── Filters ──────────────────────────────────────────────────────────────
+i_volLen   = input.int(20,   "Volume MA Length",   minval=1,   group="Filters")
+i_volMult  = input.float(1.0, "Volume Multiplier", minval=0.0, step=0.1, group="Filters")
+i_useShort = input.bool(true, "Allow Shorts", group="Filters")
+
+// ── Calculations ─────────────────────────────────────────────────────────
+barInSession(sess) => time(timeframe.period, sess) != 0
+
+ma1 = ta.sma(close, i_fastLen)
+ma2 = ta.sma(close, i_slowLen)
+
+f_angle(_src, _lookback, _atrPeriod) =>
+    rad2degree = 180 / 3.141592653589793238462643  //pi
+    rad2degree * math.atan((_src - _src[_lookback]) / ta.atr(_atrPeriod) / _lookback)
+_angle = f_angle(ma2, i_lookback, i_atrPeriod)
+
+volMA = ta.sma(volume, i_volLen)
+volOK = volMA > 0 and volume > volMA * i_volMult
+
+plot(ma1, color=color.red,   title="Fast MA")
+plot(ma2, color=color.green, title="Slow MA")
+
+crosso = ta.crossover(ma1, ma2)
+crossu = ta.crossunder(ma1, ma2)
+
+f_somethingHappened(_cond, _lookback) =>
+    bool _crossed = false
+    for i = 1 to _lookback
+        if _cond[i]
+            _crossed := true
+    _crossed
+
+longcrossed  = f_somethingHappened(crosso, i_crossWindow)
+shortcrossed = f_somethingHappened(crossu, i_crossWindow)
+
+bool intradaySession = barInSession(i_marketSession)
+
+long  = longcrossed  and _angle >  angleCriteria  and volOK and intradaySession
+short = shortcrossed and _angle < -angleCriteria  and volOK and intradaySession and i_useShort
+
+// ── Entries ──────────────────────────────────────────────────────────────
+if long
+    strategy.entry("Long", strategy.long)
+if short
+    strategy.entry("Short", strategy.short)
+
+// ── Percentage TP/SL exits (no-op while flat: avg price is na) ────────────
+float longTP  = strategy.position_avg_price * (1 + i_tpPct / 100)
+float longSL  = strategy.position_avg_price * (1 - i_slPct / 100)
+float shortTP = strategy.position_avg_price * (1 - i_tpPct / 100)
+float shortSL = strategy.position_avg_price * (1 + i_slPct / 100)
+strategy.exit("L-Exit", from_entry="Long",  limit=longTP,  stop=longSL)
+strategy.exit("S-Exit", from_entry="Short", limit=shortTP, stop=shortSL)
+
+// ── Session square-off ───────────────────────────────────────────────────
+if (not intradaySession) and (strategy.position_size != 0)
+    strategy.close_all(comment="Square-off")

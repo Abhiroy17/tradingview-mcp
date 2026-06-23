@@ -4,3 +4,15 @@ scripts/current.pine
 temp_*
 *.log
 discovery-log.json
+.data/
+
+# Build artifacts
+ui-dist/
+
+# Runtime snapshots — generated files, not source
+briefing_*.json
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local

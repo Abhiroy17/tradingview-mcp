@@ -3,6 +3,10 @@
  */
 import { evaluate as _evaluate, getChartApi as _getChartApi, safeString, requireFinite } from '../connection.js';
 
+// Module-level aliases for functions that don't use dependency injection
+const evaluate = _evaluate;
+const getChartApi = _getChartApi;
+
 function _resolve(deps) {
   return { evaluate: deps?.evaluate || _evaluate, getChartApi: deps?.getChartApi || _getChartApi };
 }

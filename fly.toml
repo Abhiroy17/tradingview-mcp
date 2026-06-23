@@ -1,0 +1,50 @@
+# Fly.io configuration — MunafaSutra Trading Dashboard
+# Deploy with: fly deploy
+
+app = "munafasutra-dashboard"
+primary_region = "sin"   # Singapore — lowest latency to NSE/BSE
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3456"
+  TZ = "Asia/Kolkata"
+  HEADLESS = "true"
+  NODE_ENV = "production"
+
+# Secret env vars — set with: fly secrets set TELEGRAM_BOT_TOKEN=xxx TELEGRAM_CHAT_ID=xxx
+# TELEGRAM_BOT_TOKEN
+# TELEGRAM_CHAT_ID
+
+[[services]]
+  internal_port = 3456
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.http_checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+    restart_limit = 3
+    timeout = "10s"
+
+# Persistent volume — keeps .data/ across redeploys
+# Create with: fly volumes create tradingview_data --size 1 --region sin
+[[mounts]]
+  source = "tradingview_data"
+  destination = "/app/.data"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

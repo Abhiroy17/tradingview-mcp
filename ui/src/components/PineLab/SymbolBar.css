@@ -1,0 +1,55 @@
+.pl-symbol-bar {
+  padding: 12px 16px;
+  background: rgba(74, 158, 255, 0.05);
+  border: 1px solid rgba(74, 158, 255, 0.15);
+  border-radius: 8px;
+}
+
+.pl-bar-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.pl-bar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.pl-bar-field-symbol {
+  flex: 1;
+  min-width: 240px;
+}
+
+.pl-bar-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255,255,255,0.5);
+  font-weight: 500;
+}
+
+.pl-bar-select {
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: var(--text, #e8e8e8);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-weight: 500;
+}
+
+.pl-bar-select:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.pl-bar-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

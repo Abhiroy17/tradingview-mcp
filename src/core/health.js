@@ -4,6 +4,7 @@
 import { getClient, getTargetInfo, evaluate } from '../connection.js';
 import { existsSync } from 'fs';
 import { execSync, spawn } from 'child_process';
+import path from 'path';
 
 export async function healthCheck() {
   await getClient();
@@ -207,20 +208,64 @@ export async function launch({ port, kill_existing } = {}) {
     } catch { /* ignore */ }
   }
 
+  // Check for Windows Store (MSIX) app if no traditional exe found
+  let isMsixApp = false;
+  if (!tvPath && platform === 'win32') {
+    try {
+      const appxInfo = execSync(
+        'powershell -NoProfile -Command "Get-AppxPackage -Name *TradingView* | Select-Object -ExpandProperty PackageFamilyName"',
+        { timeout: 8000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+      ).trim();
+      if (appxInfo) {
+        tvPath = appxInfo; // Store the family name
+        isMsixApp = true;
+      }
+    } catch { /* not installed as MSIX */ }
+  }
+
   if (!tvPath) {
     throw new Error(`TradingView not found on ${platform}. Searched: ${candidates.join(', ')}. Launch manually with: /path/to/TradingView --remote-debugging-port=${cdpPort}`);
   }
 
   if (killFirst) {
     try {
-      if (platform === 'win32') execSync('taskkill /F /IM TradingView.exe', { timeout: 5000 });
-      else execSync('pkill -f TradingView', { timeout: 5000 });
+      if (platform === 'win32') execSync('taskkill /F /IM TradingView.exe', { timeout: 5000, stdio: 'ignore' });
+      else execSync('pkill -f TradingView', { timeout: 5000, stdio: 'ignore' });
       await new Promise(r => setTimeout(r, 1500));
     } catch { /* may not be running */ }
   }
 
-  const child = spawn(tvPath, [`--remote-debugging-port=${cdpPort}`], { detached: true, stdio: 'ignore' });
-  child.unref();
+  let launchPid = null;
+
+  if (isMsixApp && platform === 'win32') {
+    // For Windows Store (MSIX) apps, get the actual exe path and launch directly
+    try {
+      const installDir = execSync(
+        'powershell -NoProfile -Command "(Get-AppxPackage -Name TradingView.Desktop).InstallLocation"',
+        { timeout: 8000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+      ).trim();
+      const msixExe = path.join(installDir, 'TradingView.exe');
+      if (existsSync(msixExe)) {
+        const child = spawn(msixExe, [`--remote-debugging-port=${cdpPort}`], { detached: true, stdio: 'ignore' });
+        child.unref();
+        launchPid = child.pid;
+      } else {
+        throw new Error('MSIX exe not found at ' + msixExe);
+      }
+    } catch (msixErr) {
+      // Fallback: try cmd start with the known path
+      try {
+        execSync(
+          `cmd /c start "" "${tvPath}\\TradingView.exe" --remote-debugging-port=${cdpPort}`,
+          { timeout: 10000, stdio: 'ignore' }
+        );
+      } catch { /* last resort failed */ }
+    }
+  } else {
+    const child = spawn(tvPath, [`--remote-debugging-port=${cdpPort}`], { detached: true, stdio: 'ignore' });
+    child.unref();
+    launchPid = child.pid;
+  }
 
   for (let i = 0; i < 15; i++) {
     await new Promise(r => setTimeout(r, 1000));
@@ -236,7 +281,8 @@ export async function launch({ port, kill_existing } = {}) {
       if (ready) {
         const info = JSON.parse(ready);
         return {
-          success: true, platform, binary: tvPath, pid: child.pid,
+          success: true, platform, binary: tvPath, pid: launchPid,
+          msix: isMsixApp,
           cdp_port: cdpPort, cdp_url: `http://localhost:${cdpPort}`,
           browser: info.Browser, user_agent: info['User-Agent'],
         };
@@ -245,7 +291,8 @@ export async function launch({ port, kill_existing } = {}) {
   }
 
   return {
-    success: true, platform, binary: tvPath, pid: child.pid, cdp_port: cdpPort, cdp_ready: false,
+    success: true, platform, binary: tvPath, pid: launchPid, cdp_port: cdpPort, cdp_ready: false,
+    msix: isMsixApp,
     warning: 'TradingView launched but CDP not responding yet. It may still be loading. Try tv_health_check in a few seconds.',
   };
 }

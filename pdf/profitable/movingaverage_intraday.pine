@@ -1,0 +1,70 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Pritesh-StocksDeveloper
+
+// Enhanced for Indian intraday: percentage TP/SL risk management + volume
+// confirmation on entries. Mirrors src/engine/strategies/movingaverage_intraday.js
+// (Pine is canonical — keep params in sync).
+//@version=6
+strategy("Moving Average - Intraday", shorttitle = "MA - Intraday",
+     overlay=true, calc_on_every_tick = false, pyramiding = 0,
+     default_qty_type = strategy.percent_of_equity, default_qty_value = 100,
+     commission_type = strategy.commission.percent, commission_value = 0.03,
+     slippage = 2)
+
+// ── Session: market start → intraday square-off time ─────────────────────
+i_marketSession = input.session(title="Market session", defval="0915-1455", group="Session")
+
+// ── Moving averages ──────────────────────────────────────────────────────
+i_shortPeriod = input.int(title = "Short MA Period", defval = 10, minval = 2, maxval = 50,  group="Moving Averages")
+i_longPeriod  = input.int(title = "Long MA Period",  defval = 40, minval = 3, maxval = 200, group="Moving Averages")
+
+// ── Risk management (percent of entry price) ─────────────────────────────
+i_tpPct = input.float(title = "Take Profit %", defval = 1.5, minval = 0.1, step = 0.1, group="Risk")
+i_slPct = input.float(title = "Stop Loss %",   defval = 1.0, minval = 0.1, step = 0.1, group="Risk")
+
+// ── Filters ──────────────────────────────────────────────────────────────
+i_volLen   = input.int(title = "Volume MA Length",   defval = 20, minval = 1, group="Filters")
+i_volMult  = input.float(title = "Volume Multiplier", defval = 1.0, minval = 0.0, step = 0.1, group="Filters")
+i_useShort = input.bool(title = "Allow Shorts", defval = true, group="Filters")
+
+// A function to check whether the bar is in intraday session
+barInSession(sess) => time(timeframe.period, sess) != 0
+
+// Calculate moving averages
+shortAvg = ta.sma(close, i_shortPeriod)
+longAvg  = ta.sma(close, i_longPeriod)
+
+// Volume confirmation
+volMA = ta.sma(volume, i_volLen)
+volOK = volMA > 0 and volume > volMA * i_volMult
+
+// Plot moving averages
+plot(series = shortAvg, color = color.red,  title = "Short MA", linewidth = 2)
+plot(series = longAvg,  color = color.blue, title = "Long MA",  linewidth = 2)
+
+// Long/short condition (volume-confirmed crossover)
+longCondition  = ta.crossover(shortAvg, longAvg)  and volOK
+shortCondition = ta.crossunder(shortAvg, longAvg) and volOK
+
+// See if intraday session is active
+bool intradaySession = barInSession(i_marketSession)
+
+// ── Entries (only inside session) ────────────────────────────────────────
+if longCondition and intradaySession
+    strategy.entry(id = "Long", direction = strategy.long)
+
+if shortCondition and intradaySession and i_useShort
+    strategy.entry(id = "Short", direction = strategy.short)
+
+// ── Percentage TP/SL exits (no-op while flat: avg price is na) ────────────
+float longTP  = strategy.position_avg_price * (1 + i_tpPct / 100)
+float longSL  = strategy.position_avg_price * (1 - i_slPct / 100)
+float shortTP = strategy.position_avg_price * (1 - i_tpPct / 100)
+float shortSL = strategy.position_avg_price * (1 + i_slPct / 100)
+strategy.exit(id = "L-Exit", from_entry = "Long",  limit = longTP,  stop = longSL)
+strategy.exit(id = "S-Exit", from_entry = "Short", limit = shortTP, stop = shortSL)
+
+// ── Session square-off (when session is over and position is open) ───────
+squareOff = (not intradaySession) and (strategy.position_size != 0)
+if squareOff
+    strategy.close_all(comment = "Square-off")

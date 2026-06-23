@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "tradingview": {
+      "command": "node",
+      "args": ["src/server.js"],
+      "env": {}
+    }
+  }
+}

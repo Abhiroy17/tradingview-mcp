@@ -1,0 +1,53 @@
+//@version=6
+strategy("Fibonacci India Swing", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=5, initial_capital=100000, commission_type=strategy.commission.percent, commission_value=0.03)
+
+// Fibonacci retracement reversal trades, tuned for Indian markets.
+// Long  at 0.500 / 0.618 retracement with bullish bar confirmation.
+// Short at 0.236 / 0.382 retracement with bearish bar confirmation.
+// Wider SL (1.5%) reflects higher Indian intraday volatility vs US large caps.
+
+lookback = input.int(80,    "Lookback Period")
+tp_pct   = input.float(4.0, "Take Profit %", step=0.1)
+sl_pct   = input.float(2.0, "Stop Loss %",   step=0.1)
+
+// Fibonacci levels from rolling high/low
+highest_price = ta.highest(high, lookback)
+lowest_price  = ta.lowest(low, lookback)
+fib_range     = highest_price - lowest_price
+
+fib_236 = highest_price - fib_range * 0.236
+fib_382 = highest_price - fib_range * 0.382
+fib_500 = highest_price - fib_range * 0.500
+fib_618 = highest_price - fib_range * 0.618
+
+// Long: bullish bar that touches 50% / 61.8% from below
+long_at_618 = close > open and low <= fib_618 * 1.005 and close > fib_618
+long_at_500 = close > open and low <= fib_500 * 1.005 and close > fib_500
+
+// Short: bearish bar that rejects 23.6% / 38.2% from above
+short_at_236 = close < open and high >= fib_236 * 0.995 and close < fib_236
+short_at_382 = close < open and high >= fib_382 * 0.995 and close < fib_382
+
+if (long_at_618 or long_at_500) and strategy.position_size == 0
+    strategy.entry("Fib_Long", strategy.long)
+
+if (short_at_236 or short_at_382) and strategy.position_size == 0
+    strategy.entry("Fib_Short", strategy.short)
+
+// FIX: explicit price-based TP/SL anchored to position_avg_price (was opaque tick formula).
+if strategy.position_size > 0
+    avg_long = strategy.position_avg_price
+    tp_long  = avg_long * (1 + tp_pct / 100)
+    sl_long  = avg_long * (1 - sl_pct / 100)
+    strategy.exit("Fib_L_Exit", "Fib_Long", limit=tp_long, stop=sl_long)
+
+if strategy.position_size < 0
+    avg_short = strategy.position_avg_price
+    tp_short  = avg_short * (1 - tp_pct / 100)
+    sl_short  = avg_short * (1 + sl_pct / 100)
+    strategy.exit("Fib_S_Exit", "Fib_Short", limit=tp_short, stop=sl_short)
+
+plot(fib_236, color=color.new(color.red,    50), title="Fib 23.6%")
+plot(fib_382, color=color.new(color.orange, 50), title="Fib 38.2%")
+plot(fib_500, color=color.new(color.yellow, 50), title="Fib 50%")
+plot(fib_618, color=color.new(color.green,  50), title="Fib 61.8%")

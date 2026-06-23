@@ -442,20 +442,34 @@ export async function smartCompile() {
 
   const buttonClicked = await evaluate(`
     (function() {
-      var btns = document.querySelectorAll('button');
       var addBtn = null;
       var updateBtn = null;
       var saveBtn = null;
+
+      // First: check icon buttons in tv-script-widget (title attribute, split-view mode)
+      var container = document.querySelector('.tv-script-widget');
+      if (container) {
+        var cBtns = container.querySelectorAll('button');
+        for (var k = 0; k < cBtns.length; k++) {
+          var title = cBtns[k].getAttribute('title') || '';
+          if (/save and add to chart/i.test(title)) { cBtns[k].click(); return 'Save and add to chart'; }
+          if (!addBtn && /add to chart/i.test(title)) addBtn = cBtns[k];
+          if (!updateBtn && /update on chart/i.test(title)) updateBtn = cBtns[k];
+        }
+      }
+
+      // Second: check text content buttons (bottom panel mode)
+      var btns = document.querySelectorAll('button');
       for (var i = 0; i < btns.length; i++) {
         var text = btns[i].textContent.trim();
-        if (/save and add to chart/i.test(text)) {
-          btns[i].click();
-          return 'Save and add to chart';
-        }
+        if (/save and add to chart/i.test(text)) { btns[i].click(); return 'Save and add to chart'; }
         if (!addBtn && /^add to chart$/i.test(text)) addBtn = btns[i];
         if (!updateBtn && /^update on chart$/i.test(text)) updateBtn = btns[i];
         if (!saveBtn && btns[i].className.indexOf('saveButton') !== -1 && btns[i].offsetParent !== null) saveBtn = btns[i];
       }
+
+      // Priority: "Add to chart" first (ensures strategy gets applied even if removed)
+      // "Update on chart" only if Add is not available
       if (addBtn) { addBtn.click(); return 'Add to chart'; }
       if (updateBtn) { updateBtn.click(); return 'Update on chart'; }
       if (saveBtn) { saveBtn.click(); return 'Pine Save'; }

@@ -1,0 +1,41 @@
+//@version=6
+strategy("Trend 200-SMA Positional", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=3, initial_capital=100000, commission_type=strategy.commission.percent, commission_value=0.03)
+
+// Classic trend-following: buy on close cross above 200-SMA with volume confirmation.
+// 3-tier protective stop: HIGHEST of (a) -8% hard stop, (b) ATR×3 chandelier trail, (c) 50-SMA.
+// Hard exit on close below 200-SMA (regime break).
+
+trend_len = input.int(200,  "Trend SMA Length")
+fast_len  = input.int(20,   "Fast SMA Length (trail)")
+vol_len   = input.int(20,   "Volume SMA Length")
+vol_mult  = input.float(1.5,"Volume Multiplier",    step=0.1)
+sl_pct    = input.float(12.0,"Hard Stop Loss %",     step=0.5)
+atr_len   = input.int(14,   "ATR Length")
+atr_mult  = input.float(3.0,"ATR Trail Multiplier", step=0.5)
+
+sma_trend = ta.sma(close, trend_len)
+sma_fast  = ta.sma(close, fast_len)
+vol_ma    = ta.sma(volume, vol_len)
+atr_val   = ta.atr(atr_len)
+
+// Entry: cross-above 200-SMA with volume + price already above 50-SMA (regime confirmation)
+entry_condition = close > sma_trend and close[1] <= sma_trend[1] and volume > vol_ma * vol_mult and close > sma_fast
+
+if entry_condition and strategy.position_size == 0
+    strategy.entry("Trend_Long", strategy.long)
+
+// 3-tier exit — use the HIGHEST (most protective) stop level
+if strategy.position_size > 0
+    avg_p     = strategy.position_avg_price
+    hard_sl   = avg_p * (1 - sl_pct / 100)
+    atr_trail = high - atr_val * atr_mult
+    sma_trail = sma_fast
+    stop_px   = math.max(hard_sl, math.max(atr_trail, sma_trail))
+    strategy.exit("Trend_Exit", "Trend_Long", stop=stop_px)
+
+// Hard exit on close break below 200-SMA
+if strategy.position_size > 0 and close < sma_trend
+    strategy.close("Trend_Long", comment="200SMA_Break")
+
+plot(sma_fast,  "SMA50",  color=color.blue)
+plot(sma_trend, "SMA200", color=color.red)
