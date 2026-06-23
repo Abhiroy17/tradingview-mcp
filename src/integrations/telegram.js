@@ -221,8 +221,8 @@ class TelegramService {
     const emoji = alert.type === 'BUY' ? '🟢' : alert.type === 'SELL' ? '🔴' : '🟡';
     const price = alert.price ? ` @ ₹${alert.price}` : '';
     const text = [
-      `${emoji} *${alert.type}* — ${alert.symbol}${price}`,
-      `Strategy: ${alert.strategyName || alert.strategy || 'Unknown'}`,
+      `${emoji} *${alert.type}* — ${this._escape(alert.symbol)}${price}`,
+      `Strategy: ${this._escape(alert.strategyName || alert.strategy || 'Unknown')}`,
       alert.msg ? `_${this._escape(alert.msg)}_` : '',
       `🕐 ${alert.time || new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false })}`,
     ].filter(Boolean).join('\n');
@@ -292,7 +292,7 @@ class TelegramService {
       for (const r of buys.slice(0, 15)) {
         const price = r.price ? ` @ ₹${r.price}` : '';
         const wr = r.metrics?.winRate != null ? ` WR:${r.metrics.winRate.toFixed(0)}%` : '';
-        lines.push(`• \`${r.symbol}\`${price} — ${r.name || r.code}${wr}`);
+        lines.push(`• \`${r.symbol}\`${price} — ${this._escape(r.name || r.code)}${wr}`);
       }
     }
 
@@ -300,14 +300,14 @@ class TelegramService {
       lines.push(`\n🔴 *SELL Signals (${sells.length})*`);
       for (const r of sells.slice(0, 15)) {
         const price = r.price ? ` @ ₹${r.price}` : '';
-        lines.push(`• \`${r.symbol}\`${price} — ${r.name || r.code}`);
+        lines.push(`• \`${r.symbol}\`${price} — ${this._escape(r.name || r.code)}`);
       }
     }
 
     if (others.length > 0) {
       lines.push(`\n🟡 *Other Signals (${others.length})*`);
       for (const r of others.slice(0, 10)) {
-        lines.push(`• \`${r.symbol}\` [${r.signalType}] — ${r.name || r.code}`);
+        lines.push(`• \`${r.symbol}\` [${r.signalType}] — ${this._escape(r.name || r.code)}`);
       }
     }
 
