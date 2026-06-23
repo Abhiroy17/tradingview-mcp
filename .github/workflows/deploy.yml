@@ -1,0 +1,34 @@
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/tradingview-mcp
+
+            echo "Pulling latest code..."
+            git pull origin master
+
+            echo "Installing dependencies..."
+            npm install --production=false
+
+            echo "Building React UI..."
+            cd ui && npm install && npm run build && cd ..
+
+            echo "Restarting dashboard..."
+            pm2 restart munafasutra
+
+            echo "Deploy complete ✓"
+            pm2 status
