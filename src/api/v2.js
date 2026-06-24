@@ -231,7 +231,6 @@ export async function v2Router(req, res, pathname) {
       const body = await readBody(req);
       const { jobs, mode = 'live', concurrency = 8 } = body;
       if (!Array.isArray(jobs) || !jobs.length) throw new Error('jobs[] required');
-      if (jobs.length > 200) throw new Error('max 200 jobs per request');
       const results = await scanMatrix({ jobs, mode, concurrency });
       const actionable = actionableOnly(results);
       sendJson(res, 200, {
@@ -285,7 +284,6 @@ export async function v2Router(req, res, pathname) {
       const { code, symbols, timeframe = '1D', mode = 'live' } = body;
       if (!code) throw new Error('code required');
       if (!Array.isArray(symbols) || !symbols.length) throw new Error('symbols[] required');
-      if (symbols.length > 200) throw new Error('max 200 symbols per request');
       const results = await scanStrategyAllSymbols(code, symbols, timeframe, { mode });
       sendJson(res, 200, {
         success: true,
@@ -343,7 +341,6 @@ export async function v2Router(req, res, pathname) {
 
       // Convenience: if `jobs` provided, run a scan first
       if (!results && Array.isArray(body.jobs)) {
-        if (body.jobs.length > 200) throw new Error('Too many jobs (max 200)');
         const scanned = await scanMatrix({
           jobs: body.jobs,
           mode: body.mode || 'live',
