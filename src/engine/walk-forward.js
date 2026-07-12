@@ -7,7 +7,7 @@
  * Usage:
  *   import { runWalkForward } from './walk-forward.js';
  *   const wf = await runWalkForward({
- *     code: 'rsi2_india_swing',
+ *     code: 'fibonacci_india_swing',
  *     symbol: 'NSE:RELIANCE',
  *     timeframe: '1D',
  *     bars,

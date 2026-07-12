@@ -26,12 +26,13 @@
  * Note: the `runFn` (actual strategy implementation) is loaded lazily by
  * `src/engine/contract.js` from `src/engine/strategies/<code>.js`.
  *
- * --- Roster (post-Phase-H) ---
+ * --- Roster (post-Phase-I) ---
  * Production tier (3): trend_200sma_positional, ema_rsi_intraday, master_intraday.
- * Experimental tier (10): rsi2_india_swing (demoted H), fibonacci_india_swing (demoted H),
- *                        ibs_india_swing, ibs_india_intraday, overnight_swing,
+ * Experimental tier (10): fibonacci_india_swing (demoted H), ibs_india_swing,
+ *                        ibs_india_intraday, overnight_swing,
  *                        monday_reversal, ibs_mean_reversion, movingaverage_intraday,
- *                        dual_movingaverage_intraday, supertrend_intraday.
+ *                        dual_movingaverage_intraday, supertrend_intraday,
+ *                        phoenix_force_india_intraday.
  *
  * Phase G demoted both ibs strategies after multi-symbol sweep showed they fail
  * to produce universal edge on the NSE large-cap basket at any tested params.
@@ -46,28 +47,6 @@ export const STRATEGY_REGISTRY = Object.freeze({
   // PRODUCTION TIER — fully validated, basket-profitable, Indian-market tuned
   // Production: trend_200sma_positional, ema_rsi_intraday
   // ══════════════════════════════════════════════════════════════════
-
-  // ── Demoted strategies (tier=experimental, kept at original position) ──
-  rsi2_india_swing: {
-    code: 'rsi2_india_swing',
-    name: 'RSI(2) India Swing (Experimental)',
-    description: 'RSI(2) tuned for Indian large-caps with volume confirmation. Daily mean-reversion, 200-EMA trend filter.',
-    family: 'mean_reversion',
-    style: 'swing',
-    tier: 'experimental',
-    timeframes: ['1D'],
-    regimeAffinity: {
-      trend: ['ranging', 'trending_up', 'mixed'],
-      vol:   ['low', 'normal', 'high'],
-    },
-    direction: 'long',
-    tags: ['rsi', 'india', 'volume', 'connors', 'experimental'],
-    source: 'profitable',
-    pineFile: 'rsi2_india_swing.pine',
-    tvBacktestable: true,
-    backtestable: true,
-    notes: 'Phase H: DEMOTED. 4y cross-basket sweep (cap tier): large_cap 1/10 profitable (-130%), mid_cap 3/10 (-105%), small_cap 2/10 (-155%). No universal edge found at any tested param combo. Per-symbol calibration may still work (RELIANCE PF 1.77) but not deployable as a basket strategy.',
-  },
 
   // ── Mean Reversion (IBS / range-position) ────────────────────────
   // NOTE: Both ibs_* strategies demoted to experimental in Phase G after
@@ -91,7 +70,8 @@ export const STRATEGY_REGISTRY = Object.freeze({
     pineFile: 'ibs_india_swing.pine',
     tvBacktestable: true,
     backtestable: true,
-    notes: 'Phase G.2: Tested 7 NSE large-caps × 4y under india_delivery costs. Only HDFCBANK profitable (PF 1.31); other 6 lose. No tested param combo rescued the strategy. Demoted to experimental — needs signal-logic redesign before re-promotion.',
+    tunedParams: { ibsEntry: 0.20, useMacd: true, useRsi: false, tp: 2.5, sl: 1.5, maxBars: 3 },
+    notes: 'Phase G.2: only HDFCBANK profitable (PF 1.31); other 6 lose. Phase I: added MACD-histogram-rising confirm + stricter ibsEntry=0.20 (locked defaults). On a mid_cap 4y basket this lifted the strategy from -210.8% (587 tr, 1/10 prof) to -4.3% (83 tr, 4/10 prof) — a +206pp swing; 5/10 prof with execution.gateOnRegime. Stays experimental: deploy with regime gate + per-symbol calibration via scripts/tune-multi.js.',
   },
   ibs_india_intraday: {
     code: 'ibs_india_intraday',
@@ -112,7 +92,8 @@ export const STRATEGY_REGISTRY = Object.freeze({
     pineFile: 'ibs_india_intraday.pine',
     tvBacktestable: true,
     backtestable: true,
-    notes: 'Phase G.3: 27-combo sweep on RELIANCE 5m × 60d showed WR 13-16%, PF 0.12-0.18 across all params. Demoted to experimental — same fundamental issue as ibs_india_swing.',
+    tunedParams: { ibsEntry: 0.25, useMacd: true, useRsi: false, tp: 0.7, sl: 0.5, maxBars: 12 },
+    notes: 'Phase G.3: 27-combo sweep on RELIANCE 5m × 60d showed WR 13-16%, PF 0.12-0.18 across all params. Phase I: added MACD-histogram-rising confirm (locked on). On large_cap 15m (~55d Upstox cap) MACD lifted it from -16.4% (50 tr, WR 14%, 0/10) to -5.6% (23 tr, WR 22%, 1/10) — halves overtrading, ~doubles WR. RSI<30 too strict for 15m (zeroes entries) so opt-in rsiMax relaxed to 40. Still experimental: intraday history is short; needs more data + per-symbol calibration.',
   },
 
   // ── Fibonacci / Retracement ──────────────────────────────────────
@@ -134,7 +115,8 @@ export const STRATEGY_REGISTRY = Object.freeze({
     pineFile: 'fibonacci_india_swing.pine',
     tvBacktestable: true,
     backtestable: true,
-    notes: 'Phase H: DEMOTED. 4y large-cap sweep: best combo 6/10 profitable but net -86.4%. No universal edge across the basket. Per-symbol calibration works (RELIANCE PF 3.44, BAJFINANCE +26%) but basket deployment loses money.',
+    tunedParams: { lookback: 50, tp: 4, sl: 3, maxBars: 20, allowShorts: false, useRsi: true, useMacd: true },
+    notes: 'Phase H: DEMOTED (raw retracement lost -86.4% on large-cap basket, no universal edge). Phase I: RE-ENRICHED with optional trend/RSI/MACD/volume filters. RSI+MACD momentum confirmation flips the large-cap basket from -86.4% -> +6.0% (WR 55%, 6/10 profitable, india_delivery 4y). Highly selective (~20 basket trades/4y) so the edge is thin; trend-only filter is a higher-frequency alternative (+1.7%, 197 trades). Stays experimental pending per-symbol calibration + larger sample.',
   },
 
   // ── Trend Following ──────────────────────────────────────────────
@@ -185,6 +167,7 @@ export const STRATEGY_REGISTRY = Object.freeze({
     pineFile: 'overnight_swing.pine',
     tvBacktestable: true,
     backtestable: true,
+    notes: 'Phase I: added opt-in useRsi(>55)/useMacd(>0) filters (kept OFF by default). 288-combo sweep on large_cap 4y = best -55.1% (WR 13%, 1/10 prof); mid_cap = best -9.3% (WR 23%, 3/10). Filters do NOT rescue the strategy — the overnight gap-up edge simply doesn\'t exist under india_delivery costs. Strategy remains experimental/research-only; do not deploy without fundamental redesign.',
   },
   monday_reversal: {
     code: 'monday_reversal',
@@ -204,7 +187,9 @@ export const STRATEGY_REGISTRY = Object.freeze({
     source: 'untested',
     pineFile: 'monday_reversal.pine',
     tvBacktestable: true,
-    backtestable: false, // Phase B will port to JS
+    backtestable: true,
+    tunedParams: { rsiThresh: 30, volMult: 1.5, tp: 2.0, sl: 0.8, maxBars: 3 },
+    notes: 'Phase I: ported to JS engine. Calendar strategy fires ~1/week — sample inherently small (N=29). RSI oversold + volume are the relevant filters; MACD/SMA showed no lift and were removed.',
   },
   ibs_mean_reversion: {
     code: 'ibs_mean_reversion',
@@ -224,7 +209,9 @@ export const STRATEGY_REGISTRY = Object.freeze({
     source: 'untested',
     pineFile: 'ibs_mean_reversion.pine',
     tvBacktestable: true,
-    backtestable: false, // Phase B may port to JS only if kept
+    backtestable: true,
+    tunedParams: { ibsThresh: 0.15, tp: 2.0, sl: 1.0, maxBars: 5, useSma: true, useRsi: false, useMacd: true },
+    notes: 'Phase I: ported to JS engine (was Pine-only). Added useSma/useRsi/useMacd + maxBars. 288-combo sweep on large_cap 4y: SMA+MACD dominate all top-5 slots. Locked ibsThresh=0.15, SMA on, MACD on → -9.8% (35 tr, WR 34%, 2/10 prof, best +5.5%). Still net-negative; stays experimental; generic baseline for comparison with ibs_india_swing.',
   },
 
   // ── Generic intraday templates (Phase 1: risk-managed + JS-wired) ────────
@@ -249,7 +236,8 @@ export const STRATEGY_REGISTRY = Object.freeze({
     pineFile: 'movingaverage_intraday.pine',
     tvBacktestable: true,
     backtestable: true,
-    notes: 'Phase 1: added % TP/SL (1.5/1.0) + volume filter to the original stop-less template. Pending basket tuning. JS engine is session-agnostic — 1D is authoritative; intraday is a signal approximation.',
+    tunedParams: { shortPeriod: 5, longPeriod: 50, volMult: 1.0, tp: 2.5, sl: 1.5, maxBars: 30, useMacd: true, useRsiExit: false },
+    notes: 'Phase I: added MACD entry confirm + RSI exit override (opt-in). 384-combo sweep on large_cap 15m ~55d: MACD lifts from -6.1% to -1.7% (same params, 80 tr, WR 36%, 5/10 prof). Locked: shortPeriod=5, longPeriod=50, volMult=1, tp=2.5, sl=1.5, useMacd=true. Near break-even; per-symbol calibration advised.',
   },
   dual_movingaverage_intraday: {
     code: 'dual_movingaverage_intraday',
@@ -269,7 +257,8 @@ export const STRATEGY_REGISTRY = Object.freeze({
     pineFile: 'dual_movingaverage_intraday.pine',
     tvBacktestable: true,
     backtestable: true,
-    notes: 'Phase 1: CRITICAL fix — original had no stops AND held overnight. Added session square-off + % TP/SL (1.5/1.0) + volume filter. Pending basket tuning.',
+    tunedParams: { angleThresh: 10, crossWindow: 10, volMult: 1.0, tp: 1.0, sl: 1.5, maxBars: 30, useMacd: true, useRsiExit: false },
+    notes: 'Phase I: added MACD entry confirm + RSI exit override (opt-in). 576-combo sweep on large_cap 15m ~55d: MACD+vol+angleThresh=10 best at -17.7% (93 tr, WR 38%, 4/10). Locked: angleThresh=10, crossWindow=10, volMult=1, tp=1, sl=1.5, useMacd=true. Still negative; stays experimental.',
   },
   ema_rsi_intraday: {
     code: 'ema_rsi_intraday',
@@ -310,7 +299,8 @@ export const STRATEGY_REGISTRY = Object.freeze({
     pineFile: 'supertrend_intraday.pine',
     tvBacktestable: true,
     backtestable: true,
-    notes: 'Phase 1: switched entry from every-bar-above-line to flip-only (crossover), added % TP/SL (2.0/1.5) + volume filter. Pending basket tuning.',
+    tunedParams: { atrPeriod: 14, multiplier: 3, volMult: 1.0, tp: 2.5, sl: 1.5, maxBars: 30, useMacd: true, useRsiEntry: false, useRsiExit: false },
+    notes: 'Phase I: added MACD entry confirm + RSI entry/exit (opt-in). 768-combo sweep on large_cap 15m ~55d: MACD turns strategy NET POSITIVE → +4.2% (83 tr, WR 40%, 7/10 profitable). Locked: multiplier=3, volMult=1, tp=2.5, sl=1.5, useMacd=true. Strong candidate for promotion after multi-sector validation.',
   },
 
   // ── Master Strategy (Phase H: quality-gated composite) ───────────────────
@@ -334,14 +324,36 @@ export const STRATEGY_REGISTRY = Object.freeze({
     backtestable: true,
     tunedParams: {
       emaFast: 10, emaMid: 20, emaSlow: 100,
-      stPeriod: 14, stMult: 3,
-      qualityThreshold: 60,
+      stPeriod: 14, stMult: 4,
+      qualityThreshold: 45,
       volLen: 20, volMult: 1.0,
-      rsiLen: 14, rsiExitLong: 70, rsiExitShort: 30,
-      tp: 3.0, sl: 1.5, maxBars: 48,
+      rsiLen: 14, rsiExitLong: 72, rsiExitShort: 30,
+      tp: 2.0, sl: 1.0, maxBars: 48,
       cooldownBars: 5, minMovePct: 0.3,
     },
-    notes: 'Phase H: Cross-based entry (from ema_rsi_intraday) + Supertrend regime filter + quality gate (q=60). Bank 15m: +9.1%, 71% WR, 7/10 profitable. IT 15m: +2.1%, 67% WR, 5/10 profitable. Fewer trades than ema_rsi (17 vs 41) but higher PnL due to better selectivity.',
+    notes: 'Phase I: Tuned quality gate + ST mult + risk params. Bank 15m: +18.0% (31 tr, 65% WR, 9/10 prof). IT 15m: +13.8% (37 tr, 65% WR, 10/10 prof). Key changes: stMult 3→4 (fewer false flips), qualityThreshold 60→45 (more trades through), tp 3→2 + sl 1.5→1 (faster exits). 2× improvement over Phase H.',
+  },
+  // ── Phoenix Force (Phase I: ported from Pine — 4-factor confluence) ─────────
+  phoenix_force_india_intraday: {
+    code: 'phoenix_force_india_intraday',
+    name: 'Phoenix Force India Intraday (4-Factor)',
+    description: 'PSAR + EMA(50) trend + MACD + RSI confluence, gated by Choppiness Index + volume + ATR floor.',
+    family: 'momentum',
+    style: 'intraday',
+    tier: 'experimental',
+    timeframes: ['5m', '15m', '30m'],
+    regimeAffinity: {
+      trend: ['trending_up', 'trending_down'],
+      vol:   ['normal', 'high'],
+    },
+    direction: 'both',
+    tags: ['psar', 'ema', 'macd', 'rsi', 'choppiness', 'intraday', 'momentum', 'experimental'],
+    source: 'untested',
+    pineFile: 'phoenix_force_india_intraday.pine',
+    tvBacktestable: true,
+    backtestable: true,
+    tunedParams: { psarStart: 0.02, psarInc: 0.02, psarMax: 0.20, maLen: 50, rsiLen: 14, rsiLongTh: 55, rsiShortTh: 47, ciLen: 14, ciThresh: 42, volMult: 1.0, atrFloor: 0.25, tp: 1.5, sl: 0.8, maxBars: 30, allowShorts: false },
+    notes: 'Phase I: Ported from Pine to JS. 4-factor (PSAR+EMA+MACD+RSI) with Choppiness Index trending gate. Large_cap 15m sweep: -8.0% (116 tr, 41% WR, 6/10 prof). Selective — designed for volatile mid-caps (AGIINFRA/MCX/KAYNES). Per-stock presets advised.',
   },
 });
 

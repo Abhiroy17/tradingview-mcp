@@ -231,3 +231,81 @@ export function roc(closes, period, endIdx) {
   if (past === 0) return 0;
   return ((closes[endIdx] - past) / past) * 100;
 }
+
+// ── Parabolic SAR (Wilder) ────────────────────────────────────────────────
+export function psarSeries(highs, lows, start = 0.02, inc = 0.02, max = 0.20) {
+  const n = highs.length;
+  const sar = new Array(n).fill(0);
+  if (n < 2) return sar;
+
+  // Initialize: assume first bar is uptrend
+  let isLong = highs[1] > highs[0] || lows[1] > lows[0];
+  let af = start;
+  let ep = isLong ? highs[0] : lows[0];
+  sar[0] = isLong ? lows[0] : highs[0];
+
+  for (let i = 1; i < n; i++) {
+    // Calculate SAR for this bar
+    sar[i] = sar[i - 1] + af * (ep - sar[i - 1]);
+
+    // Clamp SAR so it doesn't penetrate prior bars
+    if (isLong) {
+      sar[i] = Math.min(sar[i], lows[i - 1]);
+      if (i >= 2) sar[i] = Math.min(sar[i], lows[i - 2]);
+    } else {
+      sar[i] = Math.max(sar[i], highs[i - 1]);
+      if (i >= 2) sar[i] = Math.max(sar[i], highs[i - 2]);
+    }
+
+    // Check for reversal
+    let reverse = false;
+    if (isLong && lows[i] < sar[i]) {
+      reverse = true;
+      isLong = false;
+      sar[i] = ep; // SAR = prior EP on reversal
+      af = start;
+      ep = lows[i];
+    } else if (!isLong && highs[i] > sar[i]) {
+      reverse = true;
+      isLong = true;
+      sar[i] = ep;
+      af = start;
+      ep = highs[i];
+    }
+
+    if (!reverse) {
+      // Update EP and AF
+      if (isLong) {
+        if (highs[i] > ep) {
+          ep = highs[i];
+          af = Math.min(af + inc, max);
+        }
+      } else {
+        if (lows[i] < ep) {
+          ep = lows[i];
+          af = Math.min(af + inc, max);
+        }
+      }
+    }
+  }
+  return sar;
+}
+
+// ── Choppiness Index ──────────────────────────────────────────────────────
+export function chopSeries(highs, lows, closes, period = 14) {
+  const n = highs.length;
+  const ci = new Array(n).fill(50);
+  const tr = trueRangeSeries(highs, lows, closes);
+  for (let i = period; i < n; i++) {
+    let sumTR = 0;
+    let hiMax = -Infinity, loMin = Infinity;
+    for (let j = i - period + 1; j <= i; j++) {
+      sumTR += tr[j];
+      if (highs[j] > hiMax) hiMax = highs[j];
+      if (lows[j] < loMin) loMin = lows[j];
+    }
+    const range = hiMax - loMin;
+    ci[i] = range > 0 ? 100 * Math.log10(sumTR / range) / Math.log10(period) : 50;
+  }
+  return ci;
+}

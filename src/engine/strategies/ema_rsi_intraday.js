@@ -4,11 +4,14 @@
  *
  * Canonical Pine: pdf/profitable/ema_rsi_intraday.pine (keep params in sync).
  *
- * Entry long : EMA(A) crosses above EMA(B), EMA(A) > EMA(C) trend filter, bullish
- *              candle (close > open), volume > SMA(volLen) × volMult.
- * Entry short: mirror (cross down, EMA(A) < EMA(C), bearish candle).
- * Exit:  RSI > rsiExitLong (long) / RSI < rsiExitShort (short), plus TP/SL % and
- *        the maxBars time-stop (handled by the engine).
+ * Edge comes from:
+ *   - Trend strength: triple-EMA stack (10/20/100) alignment IS the momentum signal
+ *   - Volume confirmation: institutional participation required
+ *   - RSI exit: exhaustion detection prevents giving back gains
+ *   - Candle body: bullish/bearish confirmation avoids indecision wicks
+ *
+ * MACD tested Phase I — ALL top combos had useMacd=false. The EMA stack
+ * already captures momentum; adding MACD over-filters and kills good entries.
  *
  * NOTE: the JS engine is session-agnostic — the Pine intraday square-off has no
  *       JS equivalent. The 1D timeframe is authoritative for promotion.

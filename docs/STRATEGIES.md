@@ -1,12 +1,12 @@
 # Strategies Reference
 
-Per-strategy documentation for the post-Phase-H roster. Generated from `src/engine/registry.js` and Phase H validation runs.
+Per-strategy documentation for the post-Phase-I roster. Generated from `src/engine/registry.js` and Phase H/I validation runs.
 
 > **Production-deployment caveat**: All `tunedParams` in the registry are *universal reference defaults* derived from cross-basket sweeps (10 stocks × 3 cap tiers, 7 sectors). Deploy with the locked params; per-symbol recalibration is optional but not required for the production strategies.
 
 ---
 
-## Production Tier (2)
+## Production Tier (3)
 
 ### `trend_200sma_positional`
 
@@ -23,6 +23,7 @@ Long-only trend follower with multi-tier exit logic. The most consistently profi
 
 **Entry**: Price > 200-SMA, fast SMA(20) cross-up, volume > 1.5× SMA(20).
 **Exit**: TP +25% / SL -12% / exitSignal on close < 200-SMA (regime break) / maxBars 250.
+**Phase I additions** (opt-in OFF, no regression): `useMacdExit` (MACD hist negative 2+ bars) and `useRsiExit` (RSI < 40). Both HURT performance on daily trend strategies — keep OFF.
 
 **Tuned params** (Phase H, cap-tier basket × 4y):
 ```js
@@ -37,7 +38,7 @@ Long-only trend follower with multi-tier exit logic. The most consistently profi
 | mid_cap | **6/10** | **+92.9%** | +9.3% | +40.8% | -16.3% |
 | small_cap | **6/10** | **+98.3%** | +9.8% | +41.7% | -16.5% |
 
-**Key insight**: Exceptional on mid/small-cap (higher beta, cleaner trends). Large-cap weaker but still net profitable. Deploy as portfolio rotation across multiple names — low WR (20-32%), fat right-tail winners.
+**Key insight**: Exceptional on mid/small-cap (higher beta, cleaner trends). Large-cap weaker but still net profitable. Deploy as portfolio rotation across multiple names — low WR (20-32%), fat right-tail winners. MACD/RSI early exits don't help — trend strategies need to ride the full move.
 
 **Regime affinity**: trending_up / mixed.
 
@@ -90,68 +91,77 @@ Triple-EMA trend stack (10/20/100) with RSI exit gate and volume confirmation. *
 
 These are kept available for research and per-symbol calibration but are **hidden by default in production lists** (`listProduction()`).
 
-### `rsi2_india_swing` *(demoted in Phase H)*
+### `fibonacci_india_swing` *(demoted in Phase H, enriched Phase I)*
 
-Connors-style RSI(2) mean-reversion tuned for Indian large-caps.
+Fibonacci retracement entries (0.382/0.5/0.618) with RSI + MACD confirmation (Phase I).
 
-- **Phase H finding**: 4y cross-basket sweep across all cap tiers — large_cap 1/10 (-130%), mid_cap 3/10 (-105%), small_cap 2/10 (-155%). No universal edge at any param combo.
-- **Status**: Per-symbol calibration may work (RELIANCE PF 1.77) but not deployable as a basket strategy.
+- **Phase H**: Large-cap 4y sweep — -86.4% baseline.
+- **Phase I**: Added useMacd + useRsi filters. Best combo: useRsi=true, useMacd=true → +6.0% (6/10 prof). Major improvement from -86% to +6%.
+- **Tuned**: `{ lookback: 50, tp: 4, sl: 3, maxBars: 20, useRsi: true, rsiLong: 45, useMacd: true }`
 
-### `fibonacci_india_swing` *(demoted in Phase H)*
+### `ibs_india_swing` *(enriched Phase I)*
 
-Fibonacci retracement entries (0.382/0.5/0.618) with IBS pre-confirmation.
+IBS < 0.20 entry with MACD histogram-rising confirmation.
 
-- **Phase H finding**: Large-cap 4y sweep — best combo 6/10 profitable but net -86.4%. Per-symbol works (RELIANCE PF 3.44) but basket deployment loses.
-- **Status**: Needs redesign for basket edge.
+- **Phase I**: Added useMacd filter. Best: ibsEntry=0.20, useMacd=true → -4.3% (7/10 prof). From -210% to near breakeven.
+- **Tuned**: `{ ibsEntry: 0.20, useMacd: true, useRsi: false, tp: 2.5, sl: 1.5, maxBars: 3 }`
 
-### `ibs_india_swing` *(demoted in Phase G, redesigned Phase H)*
+### `ibs_india_intraday` *(enriched Phase I)*
 
-Internal Bar Strength swing with regime gate.
+IBS < 0.25 + VWAP + MACD intraday mean reversion.
 
-- **Phase H finding**: With very strict entry (ibsEntry=0.1) + regime gate → +2.2% (5/10 profitable, 61 trades over 4y on 10 symbols). Marginal edge, insufficient trade count for statistical confidence.
-- **Status**: Regime gate required. Too few trades for production confidence.
+- **Phase I**: Added useMacd. Best: ibsEntry=0.25, useMacd=true → -5.6% (4/10 prof). From -16.4%.
+- **Tuned**: `{ ibsEntry: 0.25, useMacd: true, useRsi: false, rsiMax: 40, tp: 0.7, sl: 0.5, maxBars: 12 }`
 
-### `ibs_india_intraday` *(demoted in Phase G)*
+### `movingaverage_intraday` *(enriched Phase I)*
 
-Strict IBS < 0.25 + session VWAP intraday mean reversion.
+SMA crossover + MACD entry confirm + RSI exit override.
 
-- **Phase G finding**: WR 13-16%, PF 0.12-0.18. Same fundamental issue as `ibs_india_swing`.
+- **Phase I**: MACD lifts from -6.1% to -1.7% (5/10 prof, 80 trades, WR 36%). Near breakeven.
+- **Tuned**: `{ shortPeriod: 5, longPeriod: 50, volMult: 1.0, tp: 2.5, sl: 1.5, maxBars: 30, useMacd: true, useRsiExit: false }`
 
-### `movingaverage_intraday`
+### `dual_movingaverage_intraday` *(enriched Phase I)*
 
-SMA crossover with volume filter. Phase 1 risk-managed template.
+SMA angle-gated crossover + MACD confirm.
 
-- **Phase H finding**: Large-cap 15m — 5/10 profitable at best (-20.5%). Near breakeven with tp=1.5, sl=1.0 but not profitable universally.
+- **Phase I**: MACD + vol + angleThresh=10 → -17.7% (93 trades, WR 38%, 4/10 prof). Still negative.
+- **Tuned**: `{ angleThresh: 10, crossWindow: 10, volMult: 1.0, tp: 1.0, sl: 1.5, maxBars: 30, useMacd: true, useRsiExit: false }`
 
-### `dual_movingaverage_intraday`
+### `supertrend_intraday` *(enriched Phase I — strong candidate for promotion)*
 
-SMA + angle filter. Phase 1 risk-managed template.
+ATR Supertrend flip + MACD confirm. **Net positive after Phase I.**
 
-- **Phase H finding**: Large-cap 15m — 4/10 profitable at best (-33.3%). Failed.
-
-### `supertrend_intraday`
-
-ATR Supertrend flip entries.
-
-- **Phase H finding**: Large-cap 15m — 7/10 profitable at best (-0.1% i.e. breakeven). Close but not net profitable. `multiplier=4, tp=2.5, sl=1.5` shows +0.6% on 79 trades (5/10).
+- **Phase I**: MACD + multiplier=3 → **+4.2%** (83 trades, WR 40%, 7/10 profitable). Only experimental strategy that is NET POSITIVE.
+- **Tuned**: `{ atrPeriod: 14, multiplier: 3, volMult: 1.0, tp: 2.5, sl: 1.5, maxBars: 30, useMacd: true, useRsiEntry: false, useRsiExit: false }`
+- **Status**: Strong candidate for promotion to production after multi-sector validation.
 
 ### `overnight_swing`
 
 Strong-close continuation: enter at close, exit at next open.
 
-- Status: Untested at scale. Calendar logic in place.
+- **Phase I**: Added useRsi/useMacd (opt-in OFF). Filters don't help — strategy is fundamentally weak on Indian equities.
+- Best: -9.3% on mid_cap, -55% on large_cap. Not deployable.
 
-### `monday_reversal`
+### `monday_reversal` *(ported Phase I)*
 
 Calendar reversal: Monday gap-up → short, Monday gap-down → long.
 
-- Status: Pine canonical exists, JS port pending.
+- **Phase I**: Ported from Pine to JS. Best: -8.2% (29 trades, WR 28%, 4/10 prof). Too few trades, seasonal only.
+- **Tuned**: `{ rsiThresh: 30, volMult: 1.5, tp: 2.0, sl: 0.8, maxBars: 3, useSma: false, useMacd: false }`
 
-### `ibs_mean_reversion`
+### `ibs_mean_reversion` *(ported Phase I)*
 
-Research baseline for IBS.
+Research baseline: IBS < 0.15 with SMA trend + MACD confirmation.
 
-- Status: Pine only, no JS implementation.
+- **Phase I**: Ported from Pine to JS. SMA+MACD dominate → -9.8%.
+- **Tuned**: `{ ibsThresh: 0.15, useSma: true, useMacd: true, useRsi: false, tp: 2.0, sl: 1.0, maxBars: 5 }`
+
+### `phoenix_force_india_intraday` *(ported Phase I)*
+
+4-factor confluence: PSAR + EMA(50) + MACD + RSI, gated by Choppiness Index + volume + ATR floor.
+
+- **Phase I**: Ported from Pine to JS. Large_cap 15m: -8.0% (116 trades, 41% WR, 6/10 prof). Designed for volatile mid-caps — per-stock presets recommended.
+- **Tuned**: `{ ciThresh: 42, rsiLongTh: 55, volMult: 1.0, atrFloor: 0.25, tp: 1.5, sl: 0.8, maxBars: 30 }`
 
 ---
 

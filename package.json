@@ -30,7 +30,12 @@
     "engine:test": "node scripts/test-engine.js",
     "upstox:auth": "node scripts/upstox-auth.js",
     "upstox:instruments": "node scripts/upstox-instruments.js",
-    "db:migrate": "node scripts/db-migrate.js"
+    "db:migrate": "node scripts/db-migrate.js",
+    "db:seed-symbols": "node scripts/seed-symbols.js",
+    "ownership:isin-map": "node scripts/build-isin-map.js",
+    "ownership:refresh": "node scripts/refresh-ownership.js",
+    "ownership:ingest-amfi": "node scripts/ingest-amfi.js",
+    "multibagger:test": "node scripts/test-multibagger.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

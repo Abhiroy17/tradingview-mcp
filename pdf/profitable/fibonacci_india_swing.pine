@@ -5,10 +5,24 @@ strategy("Fibonacci India Swing", overlay=true, default_qty_type=strategy.percen
 // Long  at 0.500 / 0.618 retracement with bullish bar confirmation.
 // Short at 0.236 / 0.382 retracement with bearish bar confirmation.
 // Wider SL (1.5%) reflects higher Indian intraday volatility vs US large caps.
+// Optional trend / RSI / MACD / volume confirmation filters (default OFF).
 
-lookback = input.int(80,    "Lookback Period")
+lookback = input.int(50,    "Lookback Period")
 tp_pct   = input.float(4.0, "Take Profit %", step=0.1)
-sl_pct   = input.float(2.0, "Stop Loss %",   step=0.1)
+sl_pct   = input.float(3.0, "Stop Loss %",   step=0.1)
+allowShorts = input.bool(false, "Allow Shorts")
+
+// ── Optional confirmation filters (Phase I basket lock: RSI + MACD ON) ──
+useTrend  = input.bool(false, "Use Trend Filter (SMA)",    group="Filters")
+trendLen  = input.int(200,    "Trend SMA Length",          group="Filters")
+useRsi    = input.bool(true,  "Use RSI Filter",            group="Filters")
+rsiLen    = input.int(14,     "RSI Length",                group="Filters")
+rsiLong   = input.int(45,     "RSI Long Max (oversold)",   group="Filters")
+rsiShort  = input.int(55,     "RSI Short Min (overbought)",group="Filters")
+useMacd   = input.bool(true,  "Use MACD Histogram Filter", group="Filters")
+useVolume = input.bool(false, "Use Volume Filter",         group="Filters")
+volLen    = input.int(20,     "Volume MA Length",          group="Filters")
+volMult   = input.float(1.0,  "Volume Multiplier", step=0.1, group="Filters")
 
 // Fibonacci levels from rolling high/low
 highest_price = ta.highest(high, lookback)
@@ -20,6 +34,15 @@ fib_382 = highest_price - fib_range * 0.382
 fib_500 = highest_price - fib_range * 0.500
 fib_618 = highest_price - fib_range * 0.618
 
+// Confirmation indicators
+sma_trend = ta.sma(close, trendLen)
+rsi_val   = ta.rsi(close, rsiLen)
+[macd_line, signal_line, hist_line] = ta.macd(close, 12, 26, 9)
+vol_ma    = ta.sma(volume, volLen)
+
+long_confirm  = (not useTrend or close > sma_trend) and (not useRsi or rsi_val <= rsiLong) and (not useMacd or hist_line > 0) and (not useVolume or volume > vol_ma * volMult)
+short_confirm = (not useTrend or close < sma_trend) and (not useRsi or rsi_val >= rsiShort) and (not useMacd or hist_line < 0) and (not useVolume or volume > vol_ma * volMult)
+
 // Long: bullish bar that touches 50% / 61.8% from below
 long_at_618 = close > open and low <= fib_618 * 1.005 and close > fib_618
 long_at_500 = close > open and low <= fib_500 * 1.005 and close > fib_500
@@ -28,10 +51,10 @@ long_at_500 = close > open and low <= fib_500 * 1.005 and close > fib_500
 short_at_236 = close < open and high >= fib_236 * 0.995 and close < fib_236
 short_at_382 = close < open and high >= fib_382 * 0.995 and close < fib_382
 
-if (long_at_618 or long_at_500) and strategy.position_size == 0
+if (long_at_618 or long_at_500) and long_confirm and strategy.position_size == 0
     strategy.entry("Fib_Long", strategy.long)
 
-if (short_at_236 or short_at_382) and strategy.position_size == 0
+if allowShorts and (short_at_236 or short_at_382) and short_confirm and strategy.position_size == 0
     strategy.entry("Fib_Short", strategy.short)
 
 // FIX: explicit price-based TP/SL anchored to position_avg_price (was opaque tick formula).

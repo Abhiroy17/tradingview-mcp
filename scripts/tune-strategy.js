@@ -12,7 +12,7 @@
  *                                 [--preset india_delivery]
  *
  * Example:
- *   node scripts/tune-strategy.js rsi2_india_swing --symbol NSE:RELIANCE --years 4
+ *   node scripts/tune-strategy.js fibonacci_india_swing --symbol NSE:RELIANCE --years 4
  */
 import { runWalkForward } from '../src/engine/walk-forward.js';
 import { getHistorical } from '../src/data/index.js';
@@ -20,34 +20,61 @@ import { STRATEGY_REGISTRY } from '../src/engine/registry.js';
 
 // ── Parameter grids per strategy ─────────────────────────────────────────
 const PARAM_GRIDS = {
-  rsi2_india_swing: {
-    rsiOversold: [10, 15, 20, 25, 30],
-    rsiExit:     [50, 60, 70],
-    tp:          [1.0, 1.5, 2.0, 2.5, 3.0],
-    sl:          [0.8, 1.0, 1.5, 2.0],
-    maxBars:     [3, 5, 7, 10],
-    volLen:      [20],
-  },
   ibs_india_swing: {
-    ibsEntry:    [0.20, 0.25, 0.30, 0.35, 0.40],
-    ibsExit:     [0.55, 0.65, 0.75],
-    tp:          [1.5, 2.0, 2.5, 3.0],
-    sl:          [1.0, 1.5, 2.0],
-    maxBars:     [3, 5, 7, 10],
+    ibsEntry:    [0.25, 0.30, 0.35],
+    ibsExit:     [0.65, 0.75],
+    tp:          [1.5, 2.5, 3.0],
+    sl:          [1.0, 1.5],
+    maxBars:     [3, 5],
+    useRsi:      [false, true],
+    useMacd:     [false, true],
   },
   ibs_india_intraday: {
-    ibsEntry:    [0.15, 0.20, 0.25, 0.30],
-    ibsExit:     [0.55, 0.65, 0.75],
-    tp:          [0.4, 0.5, 0.7, 1.0],
-    sl:          [0.3, 0.4, 0.5],
-    maxBars:     [4, 6, 8, 12],
+    ibsEntry:    [0.15, 0.20, 0.25],
+    ibsExit:     [0.65, 0.75],
+    tp:          [0.5, 0.7, 1.0],
+    sl:          [0.3, 0.5],
+    maxBars:     [6, 12],
+    useRsi:      [false, true],
+    useMacd:     [false, true],
+  },
+  overnight_swing: {
+    closeThresh: [0.85, 0.90, 0.95],
+    smaLen:      [50],
+    volMult:     [1.0, 1.5],
+    tp:          [1.0, 1.5, 2.0],
+    sl:          [0.8, 1.0],
+    maxBars:     [2, 3],
+    useRsi:      [false, true],
+    useMacd:     [false, true],
+  },
+  monday_reversal: {
+    rsiThresh:   [30, 40, 50],
+    volMult:     [1.0, 1.5],
+    tp:          [1.0, 1.5, 2.0],
+    sl:          [0.8, 1.0],
+    maxBars:     [3, 5],
+    useSma:      [false, true],
+    useMacd:     [false, true],
+  },
+  ibs_mean_reversion: {
+    ibsThresh:   [0.15, 0.20, 0.25],
+    tp:          [1.0, 1.5, 2.0],
+    sl:          [0.8, 1.0],
+    maxBars:     [5, 10],
+    useSma:      [false, true],
+    useRsi:      [false, true],
+    useMacd:     [false, true],
   },
   fibonacci_india_swing: {
-    lookback:    [20, 30, 50, 80],
-    tp:          [2.0, 3.0, 4.0, 5.0],
-    sl:          [1.0, 1.5, 2.0, 2.5],
-    maxBars:     [10, 20, 30, 50],
-    allowShorts: [false, true],
+    lookback:    [50, 80, 100],
+    tp:          [3.0, 4.0, 5.0],
+    sl:          [2.0, 3.0],
+    maxBars:     [10, 20],
+    allowShorts: [false],
+    useTrend:    [false, true],
+    useRsi:      [false, true],
+    useMacd:     [false, true],
   },
   trend_200sma_positional: {
     trendLen:    [150, 200],

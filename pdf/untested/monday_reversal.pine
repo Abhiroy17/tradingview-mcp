@@ -1,25 +1,38 @@
 //@version=6
 strategy("Monday Reversal", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=2, initial_capital=100000, commission_type=strategy.commission.percent, commission_value=0.03)
 
-// Buy Monday opens that gap down on oversold RSI + volume — capture the
+// Buy Monday opens that gap down on oversold RSI(5) + volume — capture the
 // Sunday-news/weekend-noise reversion. Exit TP 1.5% / SL 0.8% / max 5 bars.
+// Optional: SMA50 trend filter + MACD>0 macro-upswing confirm.
 
-rsi_thresh    = input.int(40,   "RSI(5) Threshold",  minval=10, maxval=60)
+rsi_thresh    = input.int(30,   "RSI(5) Threshold",  minval=10, maxval=60)
 vol_len       = input.int(20,   "Volume SMA Length")
-tp_pct        = input.float(1.5,"Take Profit %", step=0.1)
+vol_mult      = input.float(1.5,"Volume Multiplier", step=0.1)
+tp_pct        = input.float(2.0,"Take Profit %", step=0.1)
 sl_pct        = input.float(0.8,"Stop Loss %",   step=0.1)
-max_bars_held = input.int(5,    "Max Bars Held", minval=1)
+max_bars_held = input.int(3,    "Max Bars Held", minval=1)
+
+// Momentum confirmation (opt-in; default OFF → original behavior)
+use_sma       = input.bool(false, "SMA Trend Filter", group="Momentum",
+     tooltip="Require Friday close > SMA — only buy Monday dips in uptrends")
+sma_len       = input.int(50,     "SMA Length", minval=10, maxval=200, group="Momentum")
+use_macd      = input.bool(false, "MACD > 0 Confirm", group="Momentum",
+     tooltip="Require MACD histogram positive — macro upswing")
 
 is_monday = dayofweek(time) == dayofweek.monday
 rsi5      = ta.rsi(close, 5)
 vol_ma    = ta.sma(volume, vol_len)
+sma_val   = ta.sma(close, sma_len)
+[macd_line, macd_signal, macd_hist] = ta.macd(close, 12, 26, 9)
 
-entry_condition = is_monday and open < close[1] and rsi5 < rsi_thresh and volume > vol_ma
+sma_ok  = not use_sma  or close[1] > sma_val[1]
+macd_ok = not use_macd or macd_hist[1] > 0
+
+entry_condition = is_monday and open < close[1] and rsi5[1] < rsi_thresh and volume[1] > vol_ma[1] * vol_mult and sma_ok and macd_ok
 
 if entry_condition and strategy.position_size == 0
     strategy.entry("Monday_Long", strategy.long)
 
-// FIX: compute TP/SL AFTER fill against actual position_avg_price (was 0 at signal bar).
 if strategy.position_size > 0
     avg_p    = strategy.position_avg_price
     tp_level = avg_p * (1 + tp_pct / 100)

@@ -30,6 +30,15 @@ i_volLen   = input.int(20,   "Volume MA Length",   minval=1,   group="Filters")
 i_volMult  = input.float(1.0, "Volume Multiplier", minval=0.0, step=0.1, group="Filters")
 i_useShort = input.bool(true, "Allow Shorts", group="Filters")
 
+// ── MACD Entry Confirm (Phase I opt-in) ──────────────────────────────────
+i_useMacd    = input.bool(true, "MACD Entry Confirm", group="Filters",
+     tooltip="Require MACD histogram > 0 for long, < 0 for short.")
+i_useRsiExit = input.bool(false, "RSI Exit Override", group="Filters",
+     tooltip="Exit when RSI > rsiExitLng (long) or RSI < rsiExitSht (short).")
+i_rsiLen     = input.int(14, "RSI Length", minval=2, group="Filters")
+i_rsiExitLng = input.int(75, "RSI Exit Long", minval=50, maxval=95, group="Filters")
+i_rsiExitSht = input.int(25, "RSI Exit Short", minval=5, maxval=50, group="Filters")
+
 // ── Calculations ─────────────────────────────────────────────────────────
 barInSession(sess) => time(timeframe.period, sess) != 0
 
@@ -43,6 +52,12 @@ _angle = f_angle(ma2, i_lookback, i_atrPeriod)
 
 volMA = ta.sma(volume, i_volLen)
 volOK = volMA > 0 and volume > volMA * i_volMult
+
+// MACD + RSI (Phase I)
+[_macdLine, _sigLine, macdHist] = ta.macd(close, 12, 26, 9)
+rsiVal = ta.rsi(close, i_rsiLen)
+macdLongOK  = not i_useMacd or macdHist > 0
+macdShortOK = not i_useMacd or macdHist < 0
 
 plot(ma1, color=color.red,   title="Fast MA")
 plot(ma2, color=color.green, title="Slow MA")
@@ -62,8 +77,8 @@ shortcrossed = f_somethingHappened(crossu, i_crossWindow)
 
 bool intradaySession = barInSession(i_marketSession)
 
-long  = longcrossed  and _angle >  angleCriteria  and volOK and intradaySession
-short = shortcrossed and _angle < -angleCriteria  and volOK and intradaySession and i_useShort
+long  = longcrossed  and _angle >  angleCriteria  and volOK and macdLongOK  and intradaySession
+short = shortcrossed and _angle < -angleCriteria  and volOK and macdShortOK and intradaySession and i_useShort
 
 // ── Entries ──────────────────────────────────────────────────────────────
 if long
@@ -78,6 +93,12 @@ float shortTP = strategy.position_avg_price * (1 - i_tpPct / 100)
 float shortSL = strategy.position_avg_price * (1 + i_slPct / 100)
 strategy.exit("L-Exit", from_entry="Long",  limit=longTP,  stop=longSL)
 strategy.exit("S-Exit", from_entry="Short", limit=shortTP, stop=shortSL)
+
+// ── RSI Exit Override (Phase I) ──────────────────────────────────────────
+if i_useRsiExit and strategy.position_size > 0 and rsiVal > i_rsiExitLng
+    strategy.close("Long", comment="RSI exit")
+if i_useRsiExit and strategy.position_size < 0 and rsiVal < i_rsiExitSht
+    strategy.close("Short", comment="RSI exit")
 
 // ── Session square-off ───────────────────────────────────────────────────
 if (not intradaySession) and (strategy.position_size != 0)

@@ -7,10 +7,10 @@ console.log('\n── Test 1: scanMatrix (4 jobs)');
 const matrixStart = Date.now();
 const m = await scanMatrix({
   jobs: [
-    { code: 'rsi2_india_swing', symbol: 'NSE:RELIANCE', timeframe: '1D' },
-    { code: 'rsi2_india_swing', symbol: 'NSE:INFY',     timeframe: '1D' },
-    { code: 'rsi2_india_swing', symbol: 'NSE:TCS',      timeframe: '1D' },
-    { code: 'rsi2_india_swing', symbol: 'NSE:HDFCBANK', timeframe: '1D' },
+    { code: 'fibonacci_india_swing', symbol: 'NSE:RELIANCE', timeframe: '1D' },
+    { code: 'fibonacci_india_swing', symbol: 'NSE:INFY',     timeframe: '1D' },
+    { code: 'fibonacci_india_swing', symbol: 'NSE:TCS',      timeframe: '1D' },
+    { code: 'fibonacci_india_swing', symbol: 'NSE:HDFCBANK', timeframe: '1D' },
   ],
   mode: 'live',
   concurrency: 4,
@@ -44,10 +44,10 @@ for (const r of actionable) {
 console.log('\n── Test 3: 2 symbols × 3 strategies grouped');
 const grid = await scanMatrix({
   jobs: [
-    { code: 'rsi2_india_swing',        symbol: 'NSE:RELIANCE', timeframe: '1D' },
+    { code: 'fibonacci_india_swing',   symbol: 'NSE:RELIANCE', timeframe: '1D' },
     { code: 'ibs_india_swing',         symbol: 'NSE:RELIANCE', timeframe: '1D' },
     { code: 'trend_200sma_positional', symbol: 'NSE:RELIANCE', timeframe: '1D' },
-    { code: 'rsi2_india_swing',        symbol: 'NSE:INFY',     timeframe: '1D' },
+    { code: 'fibonacci_india_swing',   symbol: 'NSE:INFY',     timeframe: '1D' },
     { code: 'ibs_india_swing',         symbol: 'NSE:INFY',     timeframe: '1D' },
     { code: 'trend_200sma_positional', symbol: 'NSE:INFY',     timeframe: '1D' },
   ],

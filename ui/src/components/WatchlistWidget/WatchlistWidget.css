@@ -1,0 +1,512 @@
+/* ═══════════════════════════════════════════════
+   WatchlistWidget — Professional Trading App Style
+   ═══════════════════════════════════════════════ */
+
+.ww-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Header ── */
+.ww-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #2a2a3e);
+}
+
+.ww-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ww-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary, #e5e7eb);
+  margin: 0;
+}
+
+.ww-count {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  background: var(--bg-tertiary, #1e1e2e);
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.ww-header-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ww-action-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-tertiary, #1e1e2e);
+  border: 1px solid var(--border, #2a2a3e);
+  color: var(--text-secondary, #aaa);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 32px;
+}
+
+.ww-action-btn:hover {
+  background: var(--bg-hover, #2a2a3e);
+  color: var(--text-primary, #e5e7eb);
+}
+
+.ww-action-btn.active {
+  background: var(--accent, #2196f3);
+  color: #fff;
+  border-color: var(--accent, #2196f3);
+}
+
+/* ── Add Panel ── */
+.ww-add-panel {
+  padding: 10px 12px;
+  background: var(--bg-secondary, #141422);
+  border-bottom: 1px solid var(--border, #2a2a3e);
+}
+
+.ww-add-bar {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.ww-add-input {
+  flex: 1;
+  background: var(--bg-tertiary, #1e1e2e);
+  border: 1px solid var(--border-light, #333);
+  color: var(--text-primary, #e5e7eb);
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.ww-add-input:focus {
+  border-color: var(--accent, #2196f3);
+}
+
+.ww-add-btn {
+  padding: 8px 14px;
+  background: var(--accent, #2196f3);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 38px;
+}
+
+.ww-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Quick add */
+.ww-quick-add {
+  margin-top: 8px;
+}
+
+.ww-quick-label {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  display: block;
+  margin-bottom: 5px;
+}
+
+.ww-quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ww-quick-chip {
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-tertiary, #1e1e2e);
+  border: 1px solid var(--border, #2a2a3e);
+  color: var(--text-secondary, #aaa);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ww-quick-chip:hover:not(:disabled) {
+  background: var(--bg-hover, #2a2a3e);
+  color: var(--text-primary, #e5e7eb);
+}
+
+.ww-quick-chip:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Toolbar (filter + sort) ── */
+.ww-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #2a2a3e);
+}
+
+.ww-search-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--bg-tertiary, #1e1e2e);
+  border: 1px solid var(--border, #2a2a3e);
+  border-radius: 6px;
+  padding: 0 8px;
+  min-height: 32px;
+}
+
+.ww-search-icon {
+  font-size: 12px;
+  margin-right: 6px;
+  opacity: 0.6;
+}
+
+.ww-filter-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary, #e5e7eb);
+  font-size: 12px;
+  outline: none;
+  padding: 6px 0;
+}
+
+.ww-filter-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+}
+
+.ww-sort-select {
+  background: var(--bg-tertiary, #1e1e2e);
+  border: 1px solid var(--border, #2a2a3e);
+  color: var(--text-secondary, #aaa);
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.ww-toolbar-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-tertiary, #1e1e2e);
+  border: 1px solid var(--border, #2a2a3e);
+  color: var(--text-secondary, #aaa);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ww-toolbar-btn:hover {
+  background: var(--bg-hover, #2a2a3e);
+}
+
+/* ── Bulk Bar (edit mode) ── */
+.ww-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(231, 76, 60, 0.05);
+  border-bottom: 1px solid var(--border, #2a2a3e);
+}
+
+.ww-bulk-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-tertiary, #1e1e2e);
+  border: 1px solid var(--border, #2a2a3e);
+  color: var(--text-secondary, #aaa);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ww-bulk-btn.danger {
+  color: #e74c3c;
+  border-color: rgba(231, 76, 60, 0.3);
+}
+
+.ww-bulk-btn.danger:not(:disabled):hover {
+  background: rgba(231, 76, 60, 0.1);
+}
+
+.ww-bulk-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Selection Info ── */
+.ww-selection-info {
+  font-size: 11px;
+  color: var(--accent, #2196f3);
+  padding: 4px 12px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border, #2a2a3e);
+}
+
+/* ── Symbol List ── */
+.ww-list {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ww-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-muted, #888);
+}
+
+.ww-empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.ww-empty p {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.ww-empty-add {
+  padding: 8px 16px;
+  background: var(--accent, #2196f3);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── Row ── */
+.ww-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #2a2a3e);
+  cursor: pointer;
+  transition: background 0.12s;
+  min-height: 48px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ww-row:last-child {
+  border-bottom: none;
+}
+
+.ww-row:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+}
+
+.ww-row.selected {
+  background: rgba(33, 150, 243, 0.06);
+  border-left: 3px solid var(--accent, #2196f3);
+}
+
+.ww-row.bulk-sel {
+  background: rgba(231, 76, 60, 0.06);
+}
+
+.ww-row.sig-buy {
+  border-left: 3px solid #27ae60;
+}
+
+.ww-row.sig-sell {
+  border-left: 3px solid #e74c3c;
+}
+
+.ww-row.sig-in_trade {
+  border-left: 3px solid #2980b9;
+}
+
+/* Checkbox */
+.ww-chk {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: var(--accent, #2196f3);
+  cursor: pointer;
+}
+
+/* Row info (left side) */
+.ww-row-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ww-sym {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #e5e7eb);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ww-tag {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.ww-tag.source {
+  background: rgba(142, 68, 173, 0.12);
+  color: #9b59b6;
+}
+
+.ww-tag.strat {
+  background: rgba(41, 128, 185, 0.12);
+  color: #3498db;
+}
+
+/* Row price (right side) */
+.ww-row-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  min-width: 70px;
+}
+
+.ww-ltp {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  color: var(--text-primary, #e5e7eb);
+}
+
+.ww-ltp.up { color: #27ae60; }
+.ww-ltp.down { color: #e74c3c; }
+.ww-ltp.muted { color: var(--text-muted, #888); }
+
+.ww-pct {
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+.ww-pct.up { color: #27ae60; }
+.ww-pct.down { color: #e74c3c; }
+
+/* Signal badge */
+.ww-signal {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #fff;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ww-signal.buy { background: #27ae60; }
+.ww-signal.sell { background: #e74c3c; }
+.ww-signal.in_trade { background: #2980b9; }
+.ww-signal.wait { background: #95a5a6; }
+
+/* Delete buttons */
+.ww-del-btn {
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  color: #e74c3c;
+  cursor: pointer;
+  font-size: 13px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ww-del-btn:hover {
+  background: rgba(231, 76, 60, 0.2);
+}
+
+.ww-del-hover {
+  background: none;
+  border: none;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  font-size: 13px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.ww-row:hover .ww-del-hover {
+  opacity: 1;
+}
+
+.ww-del-hover:hover {
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.1);
+}
+
+/* ── Footer ── */
+.ww-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border, #2a2a3e);
+  font-size: 11px;
+}
+
+.ww-ft { font-weight: 600; }
+.ww-ft.up { color: #27ae60; }
+.ww-ft.down { color: #e74c3c; }
+.ww-ft.flat { color: var(--text-muted, #888); }
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+  .ww-row { padding: 8px 10px; min-height: 44px; }
+  .ww-sym { font-size: 12px; }
+  .ww-ltp { font-size: 12px; }
+  .ww-pct { font-size: 10px; }
+  .ww-toolbar { padding: 6px 10px; gap: 6px; }
+  .ww-sort-select { font-size: 10px; padding: 4px 6px; }
+  .ww-del-hover { opacity: 1; } /* Always show on touch devices */
+  .ww-tag { display: none; } /* Hide tags on small screens */
+}

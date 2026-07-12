@@ -14,11 +14,18 @@ CREATE TABLE IF NOT EXISTS symbols (
   ticker        TEXT NOT NULL,
   asset_class   TEXT,                       -- 'equity', 'etf', 'futures', 'crypto', ...
   sector        TEXT,
+  industry      TEXT,
+  name          TEXT,
+  market_cap    NUMERIC(20,2),             -- raw value in INR
+  price         NUMERIC(18,6),
   active        BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at    TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_symbols_exchange ON symbols(exchange);
 CREATE INDEX IF NOT EXISTS idx_symbols_active   ON symbols(active);
+CREATE INDEX IF NOT EXISTS idx_symbols_sector   ON symbols(sector);
+CREATE INDEX IF NOT EXISTS idx_symbols_sector_active ON symbols(sector, active) WHERE active = TRUE;
 
 CREATE TABLE IF NOT EXISTS strategies (
   id            SERIAL PRIMARY KEY,
@@ -199,6 +206,59 @@ INSERT INTO schema_migrations (version) VALUES ('2026_07_window_label')
 ON CONFLICT (version) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────
+-- Migration: symbols enrichment (sector screening performance)
+-- ─────────────────────────────────────────────────────────────────────
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS industry TEXT;
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS market_cap NUMERIC(20,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS price NUMERIC(18,6);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_symbols_sector ON symbols(sector);
+CREATE INDEX IF NOT EXISTS idx_symbols_sector_active ON symbols(sector, active) WHERE active = TRUE;
+
+INSERT INTO schema_migrations (version) VALUES ('2026_07_symbols_enrich')
+ON CONFLICT (version) DO NOTHING;
+
+-- ─────────────────────────────────────────────────────────────────────
+-- Watchlist — user-curated symbols, unique per symbol
+-- ─────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS watchlist (
+  id            SERIAL PRIMARY KEY,
+  symbol        TEXT NOT NULL UNIQUE,       -- 'NSE:RELIANCE'
+  source        TEXT DEFAULT 'manual',      -- 'manual' | 'munafasutra' | 'multibagger'
+  price         NUMERIC(18,6),
+  change_pct    NUMERIC(10,4),
+  signal        TEXT,                       -- last signal type
+  optimal_strategy TEXT,
+  multibagger_score NUMERIC(8,2),
+  added_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_watchlist_source ON watchlist(source);
+
+-- ─────────────────────────────────────────────────────────────────────
+-- Munafa scan results — daily tips, purged before each new scan
+-- ─────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS munafa_scans (
+  id            SERIAL PRIMARY KEY,
+  symbol        TEXT NOT NULL,
+  scan_date     DATE NOT NULL DEFAULT CURRENT_DATE,
+  endpoint_url  TEXT,                       -- which munafa URL produced this
+  price         NUMERIC(18,6),
+  multibagger_score NUMERIC(8,2),           -- scored after scan
+  auto_watchlisted BOOLEAN DEFAULT FALSE,   -- true if auto-added to watchlist
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (symbol, scan_date)
+);
+CREATE INDEX IF NOT EXISTS idx_munafa_scan_date ON munafa_scans(scan_date);
+CREATE INDEX IF NOT EXISTS idx_munafa_symbol ON munafa_scans(symbol);
+
+INSERT INTO schema_migrations (version) VALUES ('2026_07_watchlist_munafa')
+ON CONFLICT (version) DO NOTHING;
+
+-- ─────────────────────────────────────────────────────────────────────
 -- Convenience views for ranking queries
 -- ─────────────────────────────────────────────────────────────────────
 
@@ -232,3 +292,95 @@ JOIN backtest_metrics m ON m.run_id = lr.run_id
 JOIN symbols      sym   ON sym.id   = lr.symbol_id
 JOIN strategies   strat ON strat.id = lr.strategy_id
 JOIN timeframes   tf    ON tf.id    = lr.timeframe_id;
+
+-- ─────────────────────────────────────────────────────────────────────
+-- Ownership / shareholding pattern — one row per (symbol, quarter)
+-- Sources: NSE corporate shareholding pattern (official) + optional
+-- Trendlyne enrichment (HNI). Percentages are of total equity.
+-- ─────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS stock_shareholding (
+  id                SERIAL PRIMARY KEY,
+  symbol            TEXT NOT NULL,               -- canonical 'NSE:TICKER'
+  quarter           DATE NOT NULL,               -- period-end date (e.g. 2026-06-30)
+  -- Holding percentages
+  promoter          NUMERIC(7,4),
+  fii               NUMERIC(7,4),                -- foreign institutional / FPI
+  dii               NUMERIC(7,4),                -- domestic institutional
+  mutual_fund       NUMERIC(7,4),
+  insurance         NUMERIC(7,4),
+  hni               NUMERIC(7,4),                -- high net-worth individuals
+  retail            NUMERIC(7,4),                -- small/public shareholders
+  govt              NUMERIC(7,4),
+  foreign_individual NUMERIC(7,4),
+  others            NUMERIC(7,4),
+  pledged_pct       NUMERIC(7,4),                -- promoter pledge %
+  -- Quarter-over-quarter changes (percentage points)
+  promoter_change   NUMERIC(7,4),
+  fii_change        NUMERIC(7,4),
+  dii_change        NUMERIC(7,4),
+  mf_change         NUMERIC(7,4),
+  insurance_change  NUMERIC(7,4),
+  hni_change        NUMERIC(7,4),
+  retail_change     NUMERIC(7,4),
+  -- Derived ownership scores (0-100)
+  smart_money_score            NUMERIC(6,2),
+  institutional_accum_score    NUMERIC(6,2),
+  promoter_confidence_score    NUMERIC(6,2),
+  -- Top holders + fund churn (JSONB)
+  top_buyers        JSONB,                       -- [{name, pct, changePct}]
+  top_sellers       JSONB,
+  funds_entered     JSONB,                       -- [name] new MFs this quarter
+  funds_exited      JSONB,                       -- [name] MFs that exited
+  source            TEXT,                        -- 'nse' | 'trendlyne' | 'merged'
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (symbol, quarter)
+);
+CREATE INDEX IF NOT EXISTS idx_shareholding_symbol  ON stock_shareholding(symbol);
+CREATE INDEX IF NOT EXISTS idx_shareholding_quarter ON stock_shareholding(quarter DESC);
+
+-- ─────────────────────────────────────────────────────────────────────
+-- AMFI mutual-fund portfolio holdings — reverse index (symbol -> funds)
+-- Parsed from AMFI monthly portfolio disclosures once, queried by symbol.
+-- ─────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS mf_portfolio_holdings (
+  id                SERIAL PRIMARY KEY,
+  symbol            TEXT NOT NULL,               -- canonical 'NSE:TICKER'
+  period            DATE NOT NULL,               -- disclosure month-end
+  fund_house        TEXT,                        -- AMC name
+  scheme_name       TEXT NOT NULL,
+  holding_value_cr  NUMERIC(18,4),               -- market value held (₹ Cr)
+  pct_of_portfolio  NUMERIC(7,4),                -- % of that scheme's AUM
+  pct_of_company    NUMERIC(7,4),                -- % of company's equity (if derivable)
+  source            TEXT DEFAULT 'amfi',
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (symbol, period, scheme_name)
+);
+CREATE INDEX IF NOT EXISTS idx_mfholdings_symbol ON mf_portfolio_holdings(symbol);
+CREATE INDEX IF NOT EXISTS idx_mfholdings_period ON mf_portfolio_holdings(period DESC);
+CREATE INDEX IF NOT EXISTS idx_mfholdings_symbol_period ON mf_portfolio_holdings(symbol, period DESC);
+
+-- ─────────────────────────────────────────────────────────────────────
+-- News cache — stock-specific + sector news (Google News RSS)
+-- ─────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS news_cache (
+  id            SERIAL PRIMARY KEY,
+  symbol        TEXT,                            -- canonical symbol, or NULL for sector-level
+  sector        TEXT,                            -- populated for sector news
+  scope         TEXT NOT NULL DEFAULT 'stock',   -- 'stock' | 'sector'
+  title         TEXT NOT NULL,
+  link          TEXT NOT NULL,
+  source_name   TEXT,
+  published_at  TIMESTAMPTZ,
+  guid          TEXT NOT NULL,                   -- dedupe key (link hash)
+  fetched_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (guid)
+);
+CREATE INDEX IF NOT EXISTS idx_news_symbol    ON news_cache(symbol, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_news_sector    ON news_cache(sector, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_news_published ON news_cache(published_at DESC);
+
+INSERT INTO schema_migrations (version) VALUES ('2026_07_ownership_news')
+ON CONFLICT (version) DO NOTHING;

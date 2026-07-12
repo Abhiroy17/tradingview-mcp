@@ -72,11 +72,11 @@ console.log('\n── /api/v2/strategies (family filter)');
   console.log(`    → ${r.body?.total} trend_following strategies`);
 }
 
-console.log('\n── /api/v2/strategies/rsi2_india_swing (single)');
+console.log('\n── /api/v2/strategies/fibonacci_india_swing (single)');
 {
-  const r = await call('GET', '/api/v2/strategies/rsi2_india_swing');
+  const r = await call('GET', '/api/v2/strategies/fibonacci_india_swing');
   check('200', r.status === 200);
-  check('code = rsi2_india_swing', r.body?.strategy?.code === 'rsi2_india_swing');
+  check('code = fibonacci_india_swing', r.body?.strategy?.code === 'fibonacci_india_swing');
 }
 
 console.log('\n── /api/v2/strategies/nonexistent → 404');
@@ -88,7 +88,7 @@ console.log('\n── /api/v2/strategies/nonexistent → 404');
 console.log('\n── /api/v2/analyze (POST, live mode)');
 {
   const r = await call('POST', '/api/v2/analyze', {
-    code: 'rsi2_india_swing', symbol: 'NSE:RELIANCE', timeframe: '1D', mode: 'live',
+    code: 'fibonacci_india_swing', symbol: 'NSE:RELIANCE', timeframe: '1D', mode: 'live',
   });
   check('200', r.status === 200);
   check('returns currentSignal', !!r.body?.result?.currentSignal);
@@ -99,7 +99,7 @@ console.log('\n── /api/v2/scan (POST, batch)');
 {
   const r = await call('POST', '/api/v2/scan', {
     jobs: [
-      { code: 'rsi2_india_swing', symbol: 'NSE:RELIANCE', timeframe: '1D' },
+      { code: 'fibonacci_india_swing', symbol: 'NSE:RELIANCE', timeframe: '1D' },
       { code: 'ibs_india_swing',  symbol: 'NSE:INFY',     timeframe: '1D' },
     ],
     mode: 'live',
@@ -136,7 +136,7 @@ console.log('\n── /api/v2/data/ohlcv?symbol=AAPL&days=60');
 
 console.log('\n── /api/v2/analyze error path (missing symbol)');
 {
-  const r = await call('POST', '/api/v2/analyze', { code: 'rsi2_india_swing' });
+  const r = await call('POST', '/api/v2/analyze', { code: 'fibonacci_india_swing' });
   check('400', r.status === 400);
   check('error message', r.body?.error?.includes('symbol'));
 }

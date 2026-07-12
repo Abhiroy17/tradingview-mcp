@@ -35,7 +35,7 @@
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 100;
+  z-index: 1000;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-top: none;
@@ -43,6 +43,7 @@
   max-height: 320px;
   overflow-y: auto;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  -webkit-overflow-scrolling: touch;
 }
 
 .symbol-search-item {
@@ -100,4 +101,19 @@
   padding: 2px 6px;
   background: var(--bg-tertiary);
   border-radius: 3px;
+}
+
+/* Mobile: larger touch targets */
+@media (max-width: 768px) {
+  .symbol-search-input {
+    padding: 12px 14px;
+    font-size: 16px; /* prevent iOS zoom */
+  }
+  .symbol-search-item {
+    padding: 12px 14px;
+    min-height: 44px;
+  }
+  .symbol-search-dropdown {
+    max-height: 50vh;
+  }
 }

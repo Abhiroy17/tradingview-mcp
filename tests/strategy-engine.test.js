@@ -122,7 +122,7 @@ describe('Strategy registry — Phase H tier classification', () => {
       'monday_reversal',
       'movingaverage_intraday',
       'overnight_swing',
-      'rsi2_india_swing',
+      'phoenix_force_india_intraday',
       'supertrend_intraday',
     ]);
   });
@@ -160,12 +160,7 @@ describe('Strategy registry — Phase H tier classification', () => {
 
     // Structured composite
     const composite = strategiesForRegime({ trend: 'ranging', vol: 'normal' });
-    assert.ok(composite.length >= 1, 'ranging+normal should match rsi2 or ibs');
-  });
-
-  it('rsi2 is demoted to experimental (Phase H)', () => {
-    const s = getStrategy('rsi2_india_swing');
-    assert.equal(s.tier, 'experimental');
+    assert.ok(composite.length >= 1, 'ranging+normal should match ibs-family strategies');
   });
 
   it('fibonacci is demoted to experimental (Phase H)', () => {

@@ -6,10 +6,16 @@
  *   large_cap +23.8% (3/10), mid_cap +92.9% (6/10), small_cap +98.3% (6/10).
  *   Use as portfolio rotation across mid/small-cap for highest edge.
  *
- * Entry: close crosses above 200-SMA with volume confirmation + price > 20-SMA.
- * Exit:  hard SL 12%, TP 25%, exitSignal on close < 200-SMA (regime break).
- *        Note: ATR chandelier trail is in the Pine canonical; JS approximates with sma200-break
- *        until runner.js gains stop-trail support (Phase D).
+ * Edge comes from:
+ *   - Trend strength: 200-SMA as regime filter (THE defining signal)
+ *   - Fast SMA(20): confirms near-term momentum alignment
+ *   - Volume: requires institutional participation on breakout bar
+ *   - Regime-break exit: close below 200-SMA = trend over (clean, no ambiguity)
+ *
+ * MACD/RSI early exits tested Phase I — BOTH HURT performance. Trend-following
+ * strategies MUST ride the full trend; early exits cut winners short.
+ *
+ * Canonical Pine: pdf/untested/trend_200sma_positional.pine (keep params in sync).
  */
 import { sma } from '../indicators.js';
 
@@ -31,7 +37,6 @@ export default {
       const crossAbove = bars.closes[i] > sma200 && bars.closes[i - 1] <= prevSma200;
       return {
         entry:      !state.inTrade && crossAbove && bars.closes[i] > sma50 && volOK,
-        // Regime-break exit: close below 200-SMA = trend over
         exitSignal: state.inTrade && bars.closes[i] < sma200,
       };
     };

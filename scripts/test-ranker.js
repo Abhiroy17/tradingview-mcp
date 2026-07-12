@@ -27,11 +27,10 @@ const res = {
 const handled = await v2Router(
   mkReq('POST', {
     jobs: [
-      { code: 'rsi2_india_swing',         symbol: 'NSE:RELIANCE', timeframe: '1D' },
       { code: 'ibs_india_swing',          symbol: 'NSE:RELIANCE', timeframe: '1D' },
       { code: 'ibs_india_intraday',       symbol: 'NSE:RELIANCE', timeframe: '5m' },
       { code: 'fibonacci_india_swing',    symbol: 'NSE:RELIANCE', timeframe: '1D' },
-      { code: 'rsi2_india_swing',         symbol: 'NSE:INFY',     timeframe: '1D' },
+      { code: 'trend_200sma_positional',  symbol: 'NSE:INFY',     timeframe: '1D' },
       { code: 'ibs_india_swing',          symbol: 'NSE:INFY',     timeframe: '1D' },
       { code: 'trend_200sma_positional',  symbol: 'NSE:TCS',      timeframe: '1D' },
     ],

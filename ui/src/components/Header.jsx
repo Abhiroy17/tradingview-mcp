@@ -1,23 +1,36 @@
+import { useState, useEffect } from 'react';
+import { NavLink } from 'react-router-dom';
+import { ChartLineUp, Eye, Rocket, Target, Bell, ClockCounterClockwise, Flask, Robot, Gear } from 'phosphor-react';
 import './Header.css';
 
-export default function Header({ connected, monitoring, activeTab, onTabChange }) {
+export default function Header({ connected, monitoring }) {
+  const [time, setTime] = useState(() => new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true }));
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true }));
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'watchlist', label: 'Watchlist', icon: '👁' },
-    { id: 'matrix', label: 'Strategy Matrix', icon: '🎯' },
-    { id: 'alerts', label: 'Price Alerts', icon: '🔔' },
-    { id: 'history', label: 'Trade History', icon: '📋' },
-    { id: 'pine-lab', label: 'Pine Lab', icon: '🧪' },
-    { id: 'ai-agent', label: 'AI Agent', icon: '🤖' },
-    { id: 'settings', label: 'Settings', icon: '⚙️' }
+    { to: '/', label: 'Dashboard', Icon: ChartLineUp },
+    { to: '/watchlist', label: 'Watchlist', Icon: Eye },
+    { to: '/multibagger', label: 'Multibagger', Icon: Rocket },
+    { to: '/matrix', label: 'Strategy Matrix', Icon: Target },
+    { to: '/alerts', label: 'Price Alerts', Icon: Bell },
+    { to: '/history', label: 'Trade History', Icon: ClockCounterClockwise },
+    { to: '/pine-lab', label: 'Pine Lab', Icon: Flask },
+    { to: '/ai-agent', label: 'AI Agent', Icon: Robot },
+    { to: '/settings', label: 'Settings', Icon: Gear }
   ];
 
   return (
     <header className="header">
       <div className="header-left">
         <h1 className="header-title">
-          <span className="header-icon">📈</span>
-          Trading Dashboard
+          <ChartLineUp size={22} weight="bold" className="header-icon" />
+          <span className="header-title-text">Trading Dashboard</span>
         </h1>
         <div className={`connection-badge ${connected ? 'connected' : 'disconnected'}`}>
           <span className="connection-dot"></span>
@@ -26,22 +39,22 @@ export default function Header({ connected, monitoring, activeTab, onTabChange }
       </div>
 
       <nav className="header-nav">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => onTabChange(tab.id)}
+        {tabs.map(({ to, label, Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === '/'}
+            className={({ isActive }) => `nav-tab ${isActive ? 'active' : ''}`}
+            title={label}
           >
-            <span className="nav-icon">{tab.icon}</span>
-            <span className="nav-label">{tab.label}</span>
-          </button>
+            <Icon size={18} weight="regular" className="nav-icon" />
+            <span className="nav-label">{label}</span>
+          </NavLink>
         ))}
       </nav>
 
       <div className="header-right">
-        <span className="time-display">
-          {new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true })}
-        </span>
+        <span className="time-display">{time}</span>
       </div>
     </header>
   );

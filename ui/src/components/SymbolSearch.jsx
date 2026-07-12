@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import './SymbolSearch.css';
 
 export default function SymbolSearch({ value, onChange, onSelect, api, disabled, placeholder }) {
@@ -11,24 +11,33 @@ export default function SymbolSearch({ value, onChange, onSelect, api, disabled,
 
   useEffect(() => { setQuery(value || ''); }, [value]);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click/touch
   useEffect(() => {
     const handler = (e) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
   }, []);
 
-  const search = async (text) => {
+  const search = useCallback(async (text) => {
     if (!text || text.length < 1) { setResults([]); setOpen(false); return; }
-    const data = await api.symbolSearch(text);
-    if (data.success && data.results) {
-      setResults(data.results);
-      setOpen(data.results.length > 0);
-      setActiveIdx(-1);
+    if (!api || !api.symbolSearch) { return; }
+    try {
+      const data = await api.symbolSearch(text);
+      if (data.success && data.results) {
+        setResults(data.results);
+        setOpen(data.results.length > 0);
+        setActiveIdx(-1);
+      }
+    } catch {
+      // Network error — silently ignore
     }
-  };
+  }, [api]);
 
   const handleInput = (e) => {
     const val = e.target.value.toUpperCase();

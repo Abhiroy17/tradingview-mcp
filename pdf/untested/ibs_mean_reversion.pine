@@ -4,22 +4,39 @@ strategy("IBS Mean Reversion (Generic)", overlay=true, default_qty_type=strategy
 // Generic IBS mean-reversion (no India-specific tuning).
 // Buy when prior bar's IBS < 0.20 (close near low) with volume confirmation.
 // Exit TP 1.5% / SL 1.0% / signal exit when close > prev close.
+// Optional: SMA50 trend, RSI<30 oversold, MACD rising confirms.
 
-ibs_thresh = input.float(0.20,"IBS Entry Threshold", step=0.05, minval=0.05, maxval=0.5)
+ibs_thresh = input.float(0.15,"IBS Entry Threshold", step=0.05, minval=0.05, maxval=0.5)
 vol_len    = input.int(20,    "Volume SMA Length")
-tp_pct     = input.float(1.5, "Take Profit %", step=0.1)
+vol_mult   = input.float(1.0, "Volume Multiplier", step=0.1)
+tp_pct     = input.float(2.0, "Take Profit %", step=0.1)
 sl_pct     = input.float(1.0, "Stop Loss %",   step=0.1)
+max_bars   = input.int(5,     "Max Bars Held", minval=1)
 
-ibs    = (close - low) / (high - low)
-vol_ma = ta.sma(volume, vol_len)
+// Momentum confirmation (Phase I: SMA + MACD locked on, RSI opt-in)
+use_sma    = input.bool(true,  "SMA Trend Filter", group="Momentum")
+sma_len    = input.int(50,     "SMA Length", minval=10, maxval=200, group="Momentum")
+use_rsi    = input.bool(false, "RSI Oversold Confirm", group="Momentum")
+rsi_len    = input.int(14,     "RSI Length", minval=2, maxval=50, group="Momentum")
+rsi_max    = input.float(30,   "RSI Max", step=1, minval=10, maxval=60, group="Momentum")
+use_macd   = input.bool(true,  "MACD Histogram Rising", group="Momentum")
 
-entry_condition = ibs[1] < ibs_thresh and volume[1] > vol_ma[1]
+ibs        = (close - low) / (high - low)
+vol_ma     = ta.sma(volume, vol_len)
+sma_val    = ta.sma(close, sma_len)
+rsi_val    = ta.rsi(close, rsi_len)
+[macd_line, macd_signal, macd_hist] = ta.macd(close, 12, 26, 9)
+
+sma_ok  = not use_sma  or close[1] > sma_val[1]
+rsi_ok  = not use_rsi  or rsi_val[1] < rsi_max
+macd_ok = not use_macd or macd_hist[1] > macd_hist[2]
+
+entry_condition = ibs[1] < ibs_thresh and volume[1] > vol_ma[1] * vol_mult and sma_ok and rsi_ok and macd_ok
 exit_condition  = strategy.position_size > 0 and close > close[1]
 
 if entry_condition and strategy.position_size == 0
     strategy.entry("IBS_Long", strategy.long)
 
-// FIX: compute TP/SL AFTER fill against actual position_avg_price.
 if strategy.position_size > 0
     avg_p    = strategy.position_avg_price
     tp_level = avg_p * (1 + tp_pct / 100)
@@ -28,6 +45,10 @@ if strategy.position_size > 0
 
 if exit_condition
     strategy.close("IBS_Long", comment="BounceClose")
+
+// Time stop
+if strategy.position_size > 0 and (bar_index - strategy.opentrades.entry_bar_index(strategy.opentrades - 1)) >= max_bars
+    strategy.close("IBS_Long", comment="MaxBars")
 
 plot(ibs, "IBS", color=color.blue)
 hline(0.20, "Oversold",   color=color.red)

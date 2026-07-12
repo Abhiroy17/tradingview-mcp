@@ -10,8 +10,8 @@
  *
  *   const results = await scanMatrix({
  *     jobs: [
- *       { code: 'rsi2_india_swing', symbol: 'NSE:RELIANCE', timeframe: '1D' },
- *       { code: 'rsi2_india_swing', symbol: 'NSE:INFY',     timeframe: '1D' },
+ *       { code: 'fibonacci_india_swing', symbol: 'NSE:RELIANCE', timeframe: '1D' },
+ *       { code: 'fibonacci_india_swing', symbol: 'NSE:INFY',     timeframe: '1D' },
  *       { code: 'ibs_india_swing',  symbol: 'NSE:RELIANCE', timeframe: '1D' },
  *     ],
  *     mode: 'live',

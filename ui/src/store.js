@@ -52,6 +52,7 @@ export const useStore = create((set, get) => ({
   setPlMultiSymbols: (v) => set({ pl_multiSymbols: typeof v === 'function' ? v(get().pl_multiSymbols) : v }),
 
   // ── Watchlist / Scanner ──
+  wl_watchlist: [],          // persisted symbol list [{symbol, price, change, ...}]
   wl_selectedSymbols: [],
   wl_selectAll: false,
   wl_scanResults: {},
@@ -59,6 +60,7 @@ export const useStore = create((set, get) => ({
   wl_scanInterval: 120000,
   wl_strategyOverrides: {}, // { symbol: strategyId } — per-symbol strategy override ('auto' or strategy key)
 
+  setWlWatchlist: (v) => set({ wl_watchlist: typeof v === 'function' ? v(get().wl_watchlist) : v }),
   setWlSelectedSymbols: (v) => set({ wl_selectedSymbols: typeof v === 'function' ? v(get().wl_selectedSymbols) : v }),
   setWlSelectAll: (v) => set({ wl_selectAll: v }),
   setWlScanResults: (v) => set({ wl_scanResults: typeof v === 'function' ? v(get().wl_scanResults) : v }),

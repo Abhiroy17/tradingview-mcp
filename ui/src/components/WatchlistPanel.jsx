@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useStore } from '../store';
 import { useV2Api } from '../hooks/useV2Api';
-import SymbolSearch from './SymbolSearch';
 import InfoTooltip from './InfoTooltip';
 import StrategySelector from './StrategySelector/StrategySelector';
 import ScanResultGrid from './StrategySelector/ScanResultGrid';
+import { WatchlistWidget } from './WatchlistWidget';
 import './WatchlistPanel.css';
 
 export default function WatchlistPanel({ api }) {
@@ -53,9 +53,8 @@ export default function WatchlistPanel({ api }) {
   const setMunafaLastFetchAt = useStore(s => s.setWlMunafaLastFetchAt);
 
   // Ephemeral state
-  const [watchlist, setWatchlist] = useState([]);
-  const [newSymbol, setNewSymbol] = useState('');
-  const [loading, setLoading] = useState(false);
+  const watchlist = useStore(s => s.wl_watchlist);
+  const setWatchlist = useStore(s => s.setWlWatchlist);
   const [scanProgress, setScanProgress] = useState(null);
   const [availableStrategies, setAvailableStrategies] = useState([]);
   const [showStrategyConfig, setShowStrategyConfig] = useState(false);
@@ -208,10 +207,8 @@ export default function WatchlistPanel({ api }) {
       return;
     }
 
-    const maxSymbols = Math.max(1, Math.floor(200 / matrixStrategies.length));
-    const sliced = symbols.slice(0, maxSymbols);
     const res = await api.startMatrixScanner({
-      symbols: sliced,
+      symbols,
       strategies: matrixStrategies,
       timeframe: matrixTimeframe,
       mode: matrixMode,
@@ -219,10 +216,7 @@ export default function WatchlistPanel({ api }) {
     });
     if (res?.success) {
       setMatrixScanning(true);
-      setMunafaMessage(`Live matrix started: ${sliced.length} symbols × ${matrixStrategies.length} strategies.`);
-      if (sliced.length < symbols.length) {
-        setMunafaMessage(`Live matrix started with ${sliced.length}/${symbols.length} symbols due to job cap (200).`);
-      }
+      setMunafaMessage(`Live matrix started: ${symbols.length} symbols × ${matrixStrategies.length} strategies.`);
     } else {
       setMunafaMessage(res?.error || 'Failed to start matrix scan');
     }
@@ -247,26 +241,6 @@ export default function WatchlistPanel({ api }) {
   const handleMatrixStop = async () => {
     await api.stopMatrixScanner();
     setMatrixScanning(false);
-  };
-
-  const addSymbol = async () => {
-    if (!newSymbol.trim()) return;
-    setLoading(true);
-    const result = await api.addToWatchlist(newSymbol.trim().toUpperCase());
-    if (result.success) {
-      setWatchlist(result.watchlist || [...watchlist, { symbol: newSymbol.trim().toUpperCase(), price: null }]);
-      setNewSymbol('');
-    }
-    setLoading(false);
-  };
-
-  const removeSymbol = async (symbol) => {
-    const result = await api.removeFromWatchlist(symbol);
-    if (result.success) {
-      setWatchlist(prev => prev.filter(w => w.symbol !== symbol));
-      setSelectedSymbols(prev => prev.filter(s => s !== symbol));
-      setScanResults(prev => { const n = { ...prev }; delete n[symbol]; return n; });
-    }
   };
 
   const toggleSymbol = (symbol) => {
@@ -915,103 +889,49 @@ export default function WatchlistPanel({ api }) {
         </div>
       )}
 
-      {/* Watchlist Management */}
+      {/* Watchlist Management — using reusable WatchlistWidget */}
       <div className="card">
-        <div className="card-header">
-          <h2>👁 Watchlist</h2>
-          <span className="watchlist-count">{watchlist.length} symbols</span>
-        </div>
-
-        <div className="watchlist-add">
-          <SymbolSearch
-            value={newSymbol}
-            onChange={setNewSymbol}
-            onSelect={async (item) => {
-              const sym = item.full_name || newSymbol;
-              if (!sym.trim()) return;
-              setLoading(true);
-              const result = await api.addToWatchlist(sym.trim().toUpperCase());
-              if (result.success) {
-                setWatchlist(result.watchlist || [...watchlist, { symbol: sym.trim().toUpperCase(), price: null }]);
-                setNewSymbol('');
+        <WatchlistWidget
+          title="👁 Watchlist"
+          symbols={watchlist}
+          selectedSymbols={selectAll ? watchlist.map(w => w.symbol) : selectedSymbols}
+          onSelectionChange={(syms) => {
+            if (syms.length === watchlist.length) {
+              setSelectAll(true);
+              setSelectedSymbols([]);
+            } else {
+              setSelectAll(false);
+              setSelectedSymbols(syms);
+            }
+          }}
+          selectable={true}
+          onAdd={async (sym) => {
+            const result = await api.addToWatchlist(sym);
+            if (result.success) {
+              if (result.watchlist) {
+                setWatchlist(result.watchlist);
+              } else {
+                setWatchlist(prev => [...prev, { symbol: sym, price: null }]);
               }
-              setLoading(false);
-            }}
-            api={api}
-            disabled={false}
-            placeholder="Search & add symbol..."
-          />
-          <button className="btn-add" onClick={addSymbol} disabled={loading}>
-            {loading ? '...' : '+ Add'}
-          </button>
-        </div>
-
-        <div className="watchlist-grid">
-          {watchlist.length === 0 ? (
-            <div className="empty-watchlist">
-              <p>No symbols in watchlist</p>
-              <p className="sub">Add symbols to monitor multiple stocks simultaneously</p>
-            </div>
-          ) : (
-            watchlist.map((item, i) => (
-              <div key={i} className="watchlist-item">
-                <div className="wl-symbol">
-                  <span className="wl-name">{item.symbol}</span>
-                  {item.optimalStrategy && (
-                    <span className="wl-strat-tag">{item.optimalStrategy}</span>
-                  )}
-                </div>
-                <div className="wl-price-section">
-                  {item.price ? (
-                    <>
-                      <span className="wl-price">₹{Number(item.price).toLocaleString('en-IN')}</span>
-                      {item.change != null && (
-                        <span className={`wl-change ${item.change >= 0 ? 'positive' : 'negative'}`}>
-                          {item.change >= 0 ? '+' : ''}{item.change}%
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="wl-price pending">—</span>
-                  )}
-                </div>
-                <div className="wl-signals">
-                  {item.signal && (
-                    <span className={`wl-signal ${item.signal.toLowerCase()}`}>{item.signal}</span>
-                  )}
-                  {item.lastScanned && (
-                    <span className="wl-scanned" title="Last scanned">🕐 {item.lastScanned}</span>
-                  )}
-                </div>
-                <button className="wl-remove" onClick={() => removeSymbol(item.symbol)} title="Remove">
-                  ✕
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="card" style={{ marginTop: 20 }}>
-        <div className="card-header">
-          <h2>📋 Quick Add Popular Stocks</h2>
-        </div>
-        <div className="quick-add-grid">
-          {['NSE:RELIANCE', 'NSE:TCS', 'NSE:INFY', 'NSE:HDFCBANK', 'NSE:ICICIBANK', 'NSE:TATASTEEL', 'NSE:SBIN', 'NSE:BHARTIARTL', 'NSE:ITC', 'NSE:KOTAKBANK', 'NSE:LT', 'NSE:AXISBANK'].map(sym => (
-            <button
-              key={sym}
-              className="quick-add-btn"
-              onClick={() => {
-                setNewSymbol(sym);
-                api.addToWatchlist(sym).then(r => {
-                  if (r.success) loadWatchlist();
-                });
-              }}
-            >
-              {sym.replace('NSE:', '')}
-            </button>
-          ))}
-        </div>
+            }
+          }}
+          onRemove={async (symbol) => {
+            const result = await api.removeFromWatchlist(symbol);
+            if (result.success) {
+              setWatchlist(prev => prev.filter(w => w.symbol !== symbol));
+              setSelectedSymbols(prev => prev.filter(s => s !== symbol));
+              setScanResults(prev => { const n = { ...prev }; delete n[symbol]; return n; });
+            }
+          }}
+          onSelect={(symbol) => !scanning && toggleSymbol(symbol)}
+          showPrices={true}
+          showSearch={true}
+          showFilter={true}
+          api={api}
+          maxHeight="500px"
+          emptyMessage="Add symbols to monitor multiple stocks simultaneously"
+          quickAddSymbols={['NSE:RELIANCE', 'NSE:TCS', 'NSE:INFY', 'NSE:HDFCBANK', 'NSE:ICICIBANK', 'NSE:TATASTEEL', 'NSE:SBIN', 'NSE:BHARTIARTL', 'NSE:ITC', 'NSE:KOTAKBANK', 'NSE:LT', 'NSE:AXISBANK']}
+        />
       </div>
     </div>
   );

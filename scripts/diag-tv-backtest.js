@@ -11,7 +11,7 @@ import { openPanel } from '../src/core/ui.js';
 import { getStrategyResults } from '../src/core/data.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const pineFile = path.resolve(__dirname, '..', 'pdf', 'profitable', 'rsi2_india_swing.pine');
+const pineFile = path.resolve(__dirname, '..', 'pdf', 'profitable', 'fibonacci_india_swing.pine');
 
 async function main() {
   const source = await fs.readFile(pineFile, 'utf8');

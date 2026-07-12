@@ -87,7 +87,94 @@ const energy = [
   'NSE:COALINDIA','NSE:ADANIPOWER',
 ];
 
-// ── Registry ───────────────────────────────────────────────────────────────
+// ── Dynamic Sector Universes (Yahoo GICS → all NSE stocks in that sector) ──
+
+/**
+ * Maps UI sector keys → Yahoo Finance GICS sector labels.
+ * When selected as a universe, the screener loads the full NSE universe and
+ * keeps only stocks whose fundamentals snapshot.sector matches.
+ */
+export const SECTOR_UNIVERSES = Object.freeze({
+  // Yahoo GICS broad sectors (match on snapshot.sector)
+  sec_technology:       { label: 'Technology',              yahooSector: 'Technology' },
+  sec_financials:       { label: 'Financial Services',      yahooSector: 'Financial Services' },
+  sec_healthcare:       { label: 'Healthcare & Pharma',     yahooSector: 'Healthcare' },
+  sec_consumer_cyclical:{ label: 'Consumer Cyclical',       yahooSector: 'Consumer Cyclical' },
+  sec_consumer_defensive:{ label: 'Consumer Defensive',     yahooSector: 'Consumer Defensive' },
+  sec_energy:           { label: 'Energy',                  yahooSector: 'Energy' },
+  sec_basic_materials:  { label: 'Basic Materials',         yahooSector: 'Basic Materials' },
+  sec_industrials:      { label: 'Industrials',             yahooSector: 'Industrials' },
+  sec_communication:    { label: 'Communication Services',  yahooSector: 'Communication Services' },
+  sec_utilities:        { label: 'Utilities',               yahooSector: 'Utilities' },
+  sec_real_estate:      { label: 'Real Estate',             yahooSector: 'Real Estate' },
+  // India-specific (Zerodha) — match on snapshot.industry keywords
+  sec_agriculture:      { label: 'Agriculture',             industryMatch: ['Farm Products', 'Agricultural'] },
+  sec_auto_ancillary:   { label: 'Auto Ancillary',          industryMatch: ['Auto Parts'] },
+  sec_automobile:       { label: 'Automobile',              industryMatch: ['Auto Manufacturers', 'Auto - '] },
+  sec_aviation:         { label: 'Aviation',                industryMatch: ['Airlines'] },
+  sec_building_materials: { label: 'Building Materials',    industryMatch: ['Building Materials', 'Building Products'] },
+  sec_chemicals:        { label: 'Chemicals',               industryMatch: ['Chemicals', 'Specialty Chemicals'] },
+  sec_consumer_durables: { label: 'Consumer Durables',      industryMatch: ['Consumer Electronics', 'Furnishings', 'Appliances'] },
+  sec_dairy:            { label: 'Dairy Products',          industryMatch: ['Dairy', 'Packaged Foods'] },
+  sec_defence:          { label: 'Defence',                 industryMatch: ['Aerospace & Defense'] },
+  sec_diversified:      { label: 'Diversified',             industryMatch: ['Conglomerates', 'Diversified'] },
+  sec_education:        { label: 'Education & Training',    industryMatch: ['Education'] },
+  sec_fertilizers:      { label: 'Fertilizers',             industryMatch: ['Agricultural Inputs', 'Fertilizers'] },
+  sec_fmcg:             { label: 'FMCG',                    industryMatch: ['Household Products', 'Personal Products', 'Packaged Foods', 'Beverages'] },
+  sec_footwear:         { label: 'Footwear',                industryMatch: ['Footwear', 'Apparel'] },
+  sec_infra:            { label: 'Infrastructure',          industryMatch: ['Infrastructure', 'Engineering & Construction'] },
+  sec_insurance:        { label: 'Insurance',               industryMatch: ['Insurance'] },
+  sec_it:               { label: 'IT - Software',           industryMatch: ['Software', 'Information Technology'] },
+  sec_logistics:        { label: 'Logistics',               industryMatch: ['Integrated Freight', 'Marine Shipping', 'Trucking'] },
+  sec_media:            { label: 'Media & Entertainment',   industryMatch: ['Entertainment', 'Broadcasting', 'Publishing', 'Advertising'] },
+  sec_mining:           { label: 'Mining & Minerals',       industryMatch: ['Mining', 'Industrial Metals'] },
+  sec_packaging:        { label: 'Packaging',               industryMatch: ['Packaging'] },
+  sec_paper:            { label: 'Paper',                   industryMatch: ['Paper', 'Forest Products'] },
+  sec_plastics:         { label: 'Plastics',                industryMatch: ['Rubber & Plastics'] },
+  sec_power:            { label: 'Power',                   industryMatch: ['Utilities - Regulated Electric', 'Independent Power', 'Utilities -'] },
+  sec_realty:           { label: 'Realty',                  industryMatch: ['Real Estate', 'REIT'] },
+  sec_renewables:       { label: 'Renewable Energy',        industryMatch: ['Solar', 'Renewable', 'Wind'] },
+  sec_retail:           { label: 'Retail',                  industryMatch: ['Retail', 'Department Stores', 'Grocery'] },
+  sec_steel:            { label: 'Steel',                   industryMatch: ['Steel'] },
+  sec_sugar:            { label: 'Sugar',                   industryMatch: ['Sugar', 'Food Processing'] },
+  sec_telecom:          { label: 'Telecom',                 industryMatch: ['Telecom'] },
+  sec_textiles:         { label: 'Textiles',                industryMatch: ['Textile', 'Apparel Manufacturing'] },
+  sec_tourism:          { label: 'Tourism & Hospitality',   industryMatch: ['Lodging', 'Resorts', 'Travel', 'Hotels'] },
+});
+
+/** Legacy UI keys → SECTOR_UNIVERSES key (backward compat for UI dropdowns). */
+export const LEGACY_SECTOR_MAP = Object.freeze({
+  bank:   'sec_financials',
+  it:     'sec_technology',
+  pharma: 'sec_healthcare',
+  auto:   'sec_consumer_cyclical',
+  fmcg:   'sec_consumer_defensive',
+  metal:  'sec_basic_materials',
+  energy: 'sec_energy',
+});
+
+/** Check if a universe key is a dynamic sector universe (or legacy alias). */
+export function isSectorUniverse(key) {
+  return !!(SECTOR_UNIVERSES[key] || LEGACY_SECTOR_MAP[key]);
+}
+
+/** Get Yahoo sector label for a universe key. Returns null if not a sector key. */
+export function getSectorLabel(key) {
+  if (SECTOR_UNIVERSES[key]) return SECTOR_UNIVERSES[key].yahooSector || null;
+  const mapped = LEGACY_SECTOR_MAP[key];
+  if (mapped && SECTOR_UNIVERSES[mapped]) return SECTOR_UNIVERSES[mapped].yahooSector || null;
+  return null;
+}
+
+/** Get industry match patterns for a universe key. Returns null if sector-level only. */
+export function getIndustryMatch(key) {
+  if (SECTOR_UNIVERSES[key]) return SECTOR_UNIVERSES[key].industryMatch || null;
+  const mapped = LEGACY_SECTOR_MAP[key];
+  if (mapped && SECTOR_UNIVERSES[mapped]) return SECTOR_UNIVERSES[mapped].industryMatch || null;
+  return null;
+}
+
+// ── Registry (curated baskets for backtesting) ─────────────────────────────
 
 const CAP_BASKETS    = { large_cap, mid_cap, small_cap };
 const SECTOR_BASKETS = { bank, it, pharma, auto, fmcg, metal, energy };

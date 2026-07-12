@@ -16,7 +16,7 @@ export default function SettingsPanel({ api }) {
     includeIntradayTradingTips: true,
     includeBestIntradayTips: true,
     pollMs: 300000,
-    maxSymbols: 40,
+    maxSymbols: 500,
     matrixIntervalMs: 120000,
     matrixTimeframe: '1D',
     matrixMode: 'backtest',

@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import StatusBar from './components/StatusBar.jsx';
 import ControlPanel from './components/ControlPanel.jsx';
@@ -12,6 +13,7 @@ import SettingsPanel from './components/SettingsPanel.jsx';
 import PineLab from './components/PineLab/PineLab.jsx';
 import StrategyMatrixView from './components/StrategyMatrix/StrategyMatrixView.jsx';
 import AiAgentPanel from './components/AiAgentPanel.jsx';
+import MultibaggerPanel from './components/MultibaggerPanel.jsx';
 import { useSSE } from './hooks/useSSE.js';
 import { useApi } from './hooks/useApi.js';
 import './App.css';
@@ -34,7 +36,6 @@ export default function App() {
   const [recommendations, setRecommendations] = useState([]);
   const [tradeHistory, setTradeHistory] = useState([]);
   const [connected, setConnected] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard');
 
   const handleSSEMessage = useCallback((payload) => {
     if (payload.type === 'status') {
@@ -81,14 +82,14 @@ export default function App() {
   const api = useApi();
 
   // Load persisted data on mount
-  useState(() => {
+  useEffect(() => {
     fetch('/api/alerts').then(r => r.json()).then(data => {
       if (data.alerts?.length) setAlerts(data.alerts);
     }).catch(() => {});
     fetch('/api/trades').then(r => r.json()).then(data => {
       if (data.trades?.length) setTradeHistory(data.trades);
     }).catch(() => {});
-  });
+  }, []);
 
   const handleStart = async (config) => {
     const result = await api.startMonitoring(config);
@@ -116,77 +117,43 @@ export default function App() {
       <Header
         connected={connected && sseConnected}
         monitoring={status.monitoring}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
       />
 
-      {activeTab === 'dashboard' && (
-        <main className="main-content">
-          <StatusBar status={status} connected={connected && sseConnected} />
-
-          <div className="dashboard-grid">
-            <div className="grid-left">
-              <QuickActions monitoring={status.monitoring} />
-              <ControlPanel
-                monitoring={status.monitoring}
-                onStart={handleStart}
-                onStop={handleStop}
-                api={api}
-              />
-              <RecommendationsPanel
-                recommendations={recommendations}
-                currentPrice={status.price}
-                symbol={status.symbol}
-              />
+      <Routes>
+        <Route path="/" element={
+          <main className="main-content">
+            <StatusBar status={status} connected={connected && sseConnected} />
+            <div className="dashboard-grid">
+              <div className="grid-left">
+                <QuickActions monitoring={status.monitoring} />
+                <ControlPanel
+                  monitoring={status.monitoring}
+                  onStart={handleStart}
+                  onStop={handleStop}
+                  api={api}
+                />
+                <RecommendationsPanel
+                  recommendations={recommendations}
+                  currentPrice={status.price}
+                  symbol={status.symbol}
+                />
+              </div>
+              <div className="grid-right">
+                <AlertsPanel alerts={alerts} onClear={clearAlerts} />
+              </div>
             </div>
-            <div className="grid-right">
-              <AlertsPanel alerts={alerts} onClear={clearAlerts} />
-            </div>
-          </div>
-        </main>
-      )}
-
-      {activeTab === 'watchlist' && (
-        <main className="main-content">
-          <WatchlistPanel api={api} />
-        </main>
-      )}
-
-      {activeTab === 'alerts' && (
-        <main className="main-content">
-          <PriceAlerts api={api} currentPrice={status.price} symbol={status.symbol} />
-        </main>
-      )}
-
-      {activeTab === 'history' && (
-        <main className="main-content">
-          <TradeHistory trades={tradeHistory} />
-        </main>
-      )}
-
-      {activeTab === 'pine-lab' && (
-        <main className="main-content">
-          <PineLab />
-        </main>
-      )}
-
-      {activeTab === 'matrix' && (
-        <main className="main-content">
-          <StrategyMatrixView />
-        </main>
-      )}
-
-      {activeTab === 'ai-agent' && (
-        <main className="main-content">
-          <AiAgentPanel api={api} status={status} />
-        </main>
-      )}
-
-      {activeTab === 'settings' && (
-        <main className="main-content">
-          <SettingsPanel api={api} />
-        </main>
-      )}
+          </main>
+        } />
+        <Route path="/watchlist" element={<main className="main-content"><WatchlistPanel api={api} /></main>} />
+        <Route path="/multibagger" element={<main className="main-content"><MultibaggerPanel /></main>} />
+        <Route path="/matrix" element={<main className="main-content"><StrategyMatrixView /></main>} />
+        <Route path="/alerts" element={<main className="main-content"><PriceAlerts api={api} currentPrice={status.price} symbol={status.symbol} /></main>} />
+        <Route path="/history" element={<main className="main-content"><TradeHistory trades={tradeHistory} /></main>} />
+        <Route path="/pine-lab" element={<main className="main-content"><PineLab /></main>} />
+        <Route path="/ai-agent" element={<main className="main-content"><AiAgentPanel api={api} status={status} /></main>} />
+        <Route path="/settings" element={<main className="main-content"><SettingsPanel api={api} /></main>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </div>
   );
 }

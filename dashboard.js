@@ -38,6 +38,12 @@ import { v2Router } from './src/api/v2.js';
 import { maybeAutoStart as schedulerMaybeAutoStart, stopScheduler } from './src/engine/scheduler.js';
 import { isNseSessionBar } from './src/engine/india-session.js';
 import { scanMatrix as engineScanMatrix } from './src/engine/scanner.js';
+import {
+  dbGetWatchlist, dbAddToWatchlist, dbBulkAddToWatchlist,
+  dbRemoveFromWatchlist, dbPurgeMunafaScans, dbInsertMunafaScan,
+  dbGetTodayMunafaScans, dbUpdateMunafaScores, dbMarkAutoWatchlisted,
+} from './src/db/watchlist.js';
+import { isDbConfigured } from './src/db/client.js';
 import { STRATEGY_CODES } from './src/engine/registry.js';
 import { getTelegram, initTelegram } from './src/integrations/telegram.js';
 import { startMorningScheduler, stopMorningScheduler } from './src/engine/morning-scheduler.js';
@@ -157,7 +163,7 @@ let settings = loadJSON('settings.json', {
     ],
     includeIntradayTradingTips: true,
     includeBestIntradayTips: true,
-    maxSymbols: 40,
+    maxSymbols: 500,
     pollMs: 300000,
     scannerIntervalMs: 120000,
     matrixIntervalMs: 120000,
@@ -3754,7 +3760,7 @@ function getTipsSourceUrls(cfg = {}) {
   return urls;
 }
 
-function parseMunafaSymbolsFromHtml(html, maxSymbols = 30) {
+function parseMunafaSymbolsFromHtml(html, maxSymbols = 500) {
   const symbolSet = new Set();
   const patterns = [
     /\/nse\/intradayTipsBTST\/([A-Z0-9_.&-]+)/g,
@@ -3776,7 +3782,7 @@ function parseMunafaSymbolsFromHtml(html, maxSymbols = 30) {
   return Array.from(symbolSet);
 }
 
-async function fetchMunafaEndpointSymbols(url, maxSymbols = 30) {
+async function fetchMunafaEndpointSymbols(url, maxSymbols = 500) {
   const resp = await fetch(url, {
     headers: {
       'User-Agent': 'tradingview-mcp/1.0 (+dashboard)',
@@ -3790,7 +3796,7 @@ async function fetchMunafaEndpointSymbols(url, maxSymbols = 30) {
 
 async function fetchMunafaTipsSymbols() {
   const cfg = settings.tipsSource || {};
-  const maxSymbols = Math.max(1, Math.min(60, Number(cfg.maxSymbols) || 40));
+  const maxSymbols = Number(cfg.maxSymbols) || 500;
   const urls = getTipsSourceUrls(cfg);
 
   // Fetch ALL symbols from each endpoint (no per-URL cap)
@@ -3841,7 +3847,6 @@ function syncTipsSymbolsIntoWatchlist(symbols) {
     const sym = normalizeScannerSymbol(s);
     if (!sym) continue;
     if (hasWatchlistSymbol(sym)) continue;
-    if (watchlist.length >= 30) break;
     watchlist.push({
       symbol: sym,
       price: null,
@@ -3859,6 +3864,71 @@ function syncTipsSymbolsIntoWatchlist(symbols) {
   }
 
   return { added, symbols: symbols.map(normalizeScannerSymbol).filter(Boolean) };
+}
+
+/**
+ * Persist munafa scan to DB, run multibagger scoring, auto-add high scorers to watchlist.
+ * @param {string[]} symbols — normalized munafa symbols
+ * @param {Array} endpointStats — per-endpoint fetch details
+ * @returns {Promise<{persisted: number, scored: number, autoAdded: string[]}>}
+ */
+async function persistAndScoreMunafaScan(symbols, endpointStats = []) {
+  if (!isDbConfigured() || !symbols.length) return { persisted: 0, scored: 0, autoAdded: [] };
+
+  try {
+    // 1. Purge old scans (before today)
+    const purged = await dbPurgeMunafaScans();
+    if (purged > 0) console.log(`[munafa-db] Purged ${purged} old scan entries`);
+
+    // 2. Insert today's scan results
+    const scanItems = symbols.map(sym => {
+      const ep = endpointStats.find(e => e.symbols?.includes(sym));
+      return { symbol: sym, endpoint_url: ep?.url || null };
+    });
+    const persisted = await dbInsertMunafaScan(scanItems);
+    console.log(`[munafa-db] Persisted ${persisted} scan results for today`);
+
+    // 3. Run quick multibagger scoring on scan symbols
+    let scored = 0;
+    const autoAdded = [];
+    try {
+      const { screenUniverse } = await import('./src/engine/multibagger/index.js');
+      const screenResult = await screenUniverse({ universe: symbols, topN: 0 });
+      if (screenResult?.results?.length) {
+        const scoreUpdates = screenResult.results
+          .filter(r => r.multibaggerScore != null)
+          .map(r => ({ symbol: r.snapshot?.symbol || r.symbol, score: r.multibaggerScore }));
+        await dbUpdateMunafaScores(scoreUpdates);
+        scored = scoreUpdates.length;
+
+        // 4. Auto-add high scorers (score >= 60) to watchlist
+        const MULTIBAGGER_THRESHOLD = 60;
+        const highScorers = scoreUpdates.filter(s => s.score >= MULTIBAGGER_THRESHOLD);
+        if (highScorers.length > 0) {
+          const wlItems = highScorers.map(s => ({
+            symbol: s.symbol,
+            source: 'multibagger',
+            price: null,
+          }));
+          await dbBulkAddToWatchlist(wlItems);
+          // Update multibagger_score on watchlist rows
+          for (const s of highScorers) {
+            await dbAddToWatchlist(s.symbol, { source: 'multibagger', multibagger_score: s.score });
+          }
+          await dbMarkAutoWatchlisted(highScorers.map(s => s.symbol));
+          autoAdded.push(...highScorers.map(s => s.symbol));
+          console.log(`[munafa-db] Auto-watchlisted ${autoAdded.length} multibagger candidates (score >= ${MULTIBAGGER_THRESHOLD})`);
+        }
+      }
+    } catch (e) {
+      console.warn('[munafa-db] Multibagger scoring failed (non-fatal):', e.message);
+    }
+
+    return { persisted, scored, autoAdded };
+  } catch (e) {
+    console.warn('[munafa-db] Persist failed:', e.message);
+    return { persisted: 0, scored: 0, autoAdded: [] };
+  }
 }
 
 function getTipsMatrixStrategies(cfg = {}) {
@@ -3908,6 +3978,12 @@ async function runTipsSourceCycle(reason = 'scheduled') {
     const sync = syncTipsSymbolsIntoWatchlist(symbols);
     tipsSourceState.lastSymbols = sync.symbols;
 
+    // Persist to DB + multibagger scoring + auto-watchlist
+    const dbResult = await persistAndScoreMunafaScan(sync.symbols, merged.endpointStats);
+    if (dbResult.autoAdded.length > 0) {
+      broadcastSSE({ type: 'watchlist_update', data: await dbGetWatchlist() || watchlist });
+    }
+
     const targetSymbols = sync.symbols.filter(sym => watchlist.some(w => w.symbol === sym));
     const autoStartScanner = cfg.autoStartScanner !== false;
     const autoStartMatrixScanner = cfg.autoStartMatrixScanner !== false;
@@ -3928,9 +4004,8 @@ async function runTipsSourceCycle(reason = 'scheduled') {
     let truncated = false;
 
     if (autoStartMatrixScanner && targetSymbols.length > 0 && matrixStrategies.length > 0) {
-      const maxSymbolsByJobs = Math.max(1, Math.floor(200 / matrixStrategies.length));
-      const matrixSymbols = targetSymbols.slice(0, maxSymbolsByJobs);
-      truncated = targetSymbols.length > matrixSymbols.length;
+      const matrixSymbols = targetSymbols;
+      truncated = false;
       const signature = `${matrixSymbols.join('|')}::${matrixStrategies.join('|')}::${matrixTimeframe}::${matrixMode}::${matrixIntervalMs}`;
 
       if (!matrixScannerEnabled || !matrixScannerManagedByTipsSource || matrixScannerManagedSignature !== signature) {
@@ -4992,6 +5067,16 @@ const server = http.createServer(async (req, res) => {
   // ── Watchlist ──
 
   if (pathname === '/api/watchlist' && req.method === 'GET') {
+    try {
+      const dbWl = await dbGetWatchlist();
+      if (dbWl) {
+        // DB-backed: return from Postgres
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, watchlist: dbWl, source: 'database' }));
+        return;
+      }
+    } catch {}
+    // Fallback: file-based
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, watchlist }));
     return;
@@ -5006,14 +5091,23 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const cleanSymbol = symbol.trim().toUpperCase().slice(0, 30);
+
+      // DB path
+      try {
+        const row = await dbAddToWatchlist(cleanSymbol, { source: 'manual' });
+        if (row) {
+          const dbWl = await dbGetWatchlist();
+          broadcastSSE({ type: 'watchlist_update', data: dbWl });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, watchlist: dbWl, source: 'database' }));
+          return;
+        }
+      } catch {}
+
+      // Fallback: file-based
       if (watchlist.find(w => w.symbol === cleanSymbol)) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'Already in watchlist' }));
-        return;
-      }
-      if (watchlist.length >= 30) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Watchlist full (max 30)' }));
         return;
       }
       const item = { symbol: cleanSymbol, price: null, change: null, signal: null, addedAt: Date.now() };
@@ -5037,13 +5131,26 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const cleaned = symbols.map(s => normalizeScannerSymbol(s)).filter(Boolean).map(s => s.slice(0, 30));
+
+      // DB path
+      try {
+        const items = cleaned.map(s => ({ symbol: s, source: 'munafasutra' }));
+        const count = await dbBulkAddToWatchlist(items);
+        if (count !== null && count !== undefined) {
+          const dbWl = await dbGetWatchlist();
+          broadcastSSE({ type: 'watchlist_update', data: dbWl });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, added: count, symbols: cleaned, watchlist: dbWl, source: 'database' }));
+          return;
+        }
+      } catch {}
+
+      // Fallback: file-based
       let added = 0;
       const accepted = [];
-      for (const raw of symbols) {
-        const cleanSymbol = normalizeScannerSymbol(raw).slice(0, 30);
-        if (!cleanSymbol) continue;
+      for (const cleanSymbol of cleaned) {
         if (watchlist.find(w => normalizeForCompare(w.symbol) === normalizeForCompare(cleanSymbol))) continue;
-        if (watchlist.length >= 30) break;
         watchlist.push({
           symbol: cleanSymbol,
           price: null,
@@ -5069,6 +5176,20 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname.startsWith('/api/watchlist/') && req.method === 'DELETE') {
     const symbol = decodeURIComponent(pathname.split('/').pop());
+
+    // DB path
+    try {
+      const removed = await dbRemoveFromWatchlist(symbol);
+      if (removed) {
+        const dbWl = await dbGetWatchlist();
+        broadcastSSE({ type: 'watchlist_update', data: dbWl });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, watchlist: dbWl, source: 'database' }));
+        return;
+      }
+    } catch {}
+
+    // Fallback: file-based
     watchlist = watchlist.filter(w => w.symbol !== symbol);
     debouncedSave('watchlist.json', () => watchlist, 500);
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -5209,6 +5330,28 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/scanner/tips-source/symbols' && req.method === 'GET') {
+    // Prefer DB for persisted scan results with scores
+    try {
+      const dbScans = await dbGetTodayMunafaScans();
+      if (dbScans && dbScans.length > 0) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          provider: 'munafasutra',
+          symbols: dbScans.map(s => s.symbol),
+          scans: dbScans,
+          count: dbScans.length,
+          endpointStats: tipsSourceState.endpointStats || [],
+          lastRunAt: tipsSourceState.lastRunAt,
+          lastStatus: tipsSourceState.lastStatus,
+          lastError: tipsSourceState.lastError,
+          source: 'database',
+        }));
+        return;
+      }
+    } catch {}
+
+    // Fallback: in-memory
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
@@ -5345,7 +5488,7 @@ const server = http.createServer(async (req, res) => {
         if (!merged.urls.length) merged.urls = defaultUrls;
         merged.includeIntradayTradingTips = merged.includeIntradayTradingTips !== false;
         merged.includeBestIntradayTips = merged.includeBestIntradayTips !== false;
-        merged.maxSymbols = Math.max(1, Math.min(60, Number(merged.maxSymbols) || 40));
+        merged.maxSymbols = Math.max(1, Number(merged.maxSymbols) || 500);
         merged.pollMs = Math.max(60000, Number(merged.pollMs) || 300000);
         merged.scannerIntervalMs = [60000, 120000, 300000, 600000].includes(Number(merged.scannerIntervalMs))
           ? Number(merged.scannerIntervalMs)
@@ -6038,6 +6181,16 @@ server.listen(PORT, () => {
   } catch (err) {
     console.warn('[scheduler] failed to auto-start:', err.message);
   }
+
+  // DB keepalive — prevent Supabase from pausing due to inactivity (ping every 3 hours)
+  try {
+    import('./src/db/client.js').then(({ isDbConfigured, query: dbQuery }) => {
+      if (isDbConfigured()) {
+        setInterval(() => { dbQuery('SELECT 1').catch(() => {}); }, 3 * 60 * 60 * 1000);
+        console.log('[db] keepalive enabled (3h interval)');
+      }
+    }).catch(() => {});
+  } catch {}
 
   try {
     startTipsSourceScheduler();

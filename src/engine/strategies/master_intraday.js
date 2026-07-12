@@ -35,10 +35,10 @@ export default {
 
     // Regime filter (supertrend)
     stPeriod: 14,
-    stMult: 3,
+    stMult: 4,  // Phase I: wider ST reduces false flips (bank+IT consensus)
 
     // Quality gate (the key differentiator)
-    qualityThreshold: 60,  // reject bottom ~60% of signals (optimal from cross-basket sweep)
+    qualityThreshold: 45,  // Phase I: lowered from 60 → lets more quality trades through
 
     // Volume
     volLen: 20,
@@ -46,12 +46,12 @@ export default {
 
     // Exit (from ema_rsi — proven)
     rsiLen: 14,
-    rsiExitLong: 70,
+    rsiExitLong: 72,  // Phase I: slightly later exit → let winners run
     rsiExitShort: 30,
 
-    // Risk management (from ema_rsi tuned params)
-    tp: 3.0,
-    sl: 1.5,
+    // Risk management (Phase I tuned)
+    tp: 2.0,   // Phase I: take profit earlier, don't give back gains
+    sl: 1.0,   // Phase I: tighter SL cuts losers faster
     maxBars: 48,
 
     // Filters

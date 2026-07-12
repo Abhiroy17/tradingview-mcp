@@ -62,6 +62,14 @@ min_turnover_lac  = input.float(50,  "Min Avg Turnover (₹ Lac/bar)", step=10, 
 skip_thursday_pm = input.bool (true, "Skip Thursday 14:00+ (Expiry Pin)", group="Filters",
      tooltip="Avoid Thursday afternoon F&O expiry pin action")
 
+// Momentum confirmation (Phase I: MACD locked on, RSI opt-in)
+use_rsi       = input.bool (false, "RSI Oversold Confirm", group="Momentum",
+     tooltip="Require current-bar RSI < threshold. NOTE: <30 is too strict for 15m and zeroes out entries; 40 is usable.")
+rsi_len       = input.int  (14,    "RSI Length", minval=2, maxval=50, group="Momentum")
+rsi_max       = input.float(40,    "RSI Max (oversold)", step=1, minval=10, maxval=50, group="Momentum")
+use_macd      = input.bool (true,  "MACD Histogram Rising", group="Momentum",
+     tooltip="Require MACD histogram turning up on current bar. Phase I: LOCKED ON — took large_cap 15m from -16.4% to -5.6%, halved overtrading, ~doubled win rate.")
+
 // ───────────────────────── Session Inputs ─────────────────────────
 entry_window_start = input.session("0930-1430", "Entry Window (IST)", group="Session",
      tooltip="Allowed entry times. Default skips first 15 min and last 60 min")
@@ -76,6 +84,8 @@ atr14      = ta.atr(14)
 atr_pct    = atr14 / close * 100
 turnover_bar = volume * close
 turnover_sma = ta.sma(turnover_bar, 20)
+rsi_val    = ta.rsi(close, rsi_len)
+[macd_line, macd_signal, macd_hist] = ta.macd(close, 12, 26, 9)
 
 // Session detection
 ist_tz = "Asia/Kolkata"
@@ -89,6 +99,8 @@ volatility_ok = not use_volatility  or atr_pct >= min_atr_pct
 liquidity_ok  = not use_liquidity   or turnover_sma >= (min_turnover_lac * 100000)  // Lac → Rupees
 thursday_ok   = not skip_thursday_pm or not is_thursday_pm
 volume_ok     = volume[1] > vol_ma[1] * vol_mult
+rsi_ok        = not use_rsi         or rsi_val < rsi_max
+macd_ok       = not use_macd        or macd_hist > macd_hist[1]
 
 // ─────────────────────────────── Entry ────────────────────────────
 entry_signal = ibs[1] < ibs_entry
@@ -97,6 +109,8 @@ entry_signal = ibs[1] < ibs_entry
              and volatility_ok
              and liquidity_ok
              and thursday_ok
+             and rsi_ok
+             and macd_ok
              and in_entry_window
              and not in_exit_window
 

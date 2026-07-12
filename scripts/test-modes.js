@@ -6,7 +6,7 @@
  * Examples:
  *   node scripts/test-modes.js                          # NSE:RELIANCE × ibs_india_swing
  *   node scripts/test-modes.js NSE:INFY                 # NSE:INFY × ibs_india_swing
- *   node scripts/test-modes.js NSE:TCS rsi2_india_swing # custom strategy
+ *   node scripts/test-modes.js NSE:TCS fibonacci_india_swing # custom strategy
  */
 import 'dotenv/config';
 import { runMatrixModes, INTRADAY_MATRIX, SWING_MATRIX } from '../src/engine/matrix-runner.js';

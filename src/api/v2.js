@@ -42,6 +42,13 @@ import { runMatrix, runMultiWindow, runWithCostStress, TIME_WINDOWS, COST_PROFIL
 import { rankSignalsV2, topNPerSymbolV2, highConfidenceOnly, rankCellsByMode, topNPerSymbolByMode, buildGenAIPayload, MODE_PROFILES } from '../engine/ranker-v2.js';
 import { checkConfluence, checkConfluenceBatch, DEFAULT_CONFLUENCE_TIMEFRAMES } from '../engine/confluence.js';
 import { searchSymbol, getHistorical, TIMEFRAMES, describeRouting } from '../data/index.js';
+import { screenUniverse, quickScreen, scoreSymbol, SCREEN_PRESETS } from '../engine/multibagger/index.js';
+import { generateAnalysis } from '../engine/multibagger/analysis.js';
+import { getOwnership } from '../data/ownership/index.js';
+import { getNews } from '../data/news/index.js';
+import { fetchFiiDiiFlows } from '../data/ownership/fii-dii-flows.js';
+import { getFundamentals, getCacheStats } from '../data/fundamentals/index.js';
+import { getUniverseInfo } from '../data/fundamentals/universe-filter.js';
 import { persistResult, persistMatrixCell, persistMatrixBatch, persistEnabled, persistMatrixModesBatch } from '../db/persist.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -802,7 +809,7 @@ export async function v2Router(req, res, pathname) {
     return true;
   }
 
-  // GET /api/v2/db/strategy-top?code=rsi2_india_swing&timeframe=1D&limit=10 — top symbols for strategy
+  // GET /api/v2/db/strategy-top?code=fibonacci_india_swing&timeframe=1D&limit=10 — top symbols for strategy
   if (pathname === '/api/v2/db/strategy-top' && req.method === 'GET') {
     try {
       const { topSymbolsForStrategy } = await import('../db/matrix.js');
@@ -832,7 +839,7 @@ export async function v2Router(req, res, pathname) {
     return true;
   }
 
-  // GET /api/v2/db/detail?symbol=NSE:RELIANCE&code=rsi2_india_swing&timeframe=1D
+  // GET /api/v2/db/detail?symbol=NSE:RELIANCE&code=fibonacci_india_swing&timeframe=1D
   if (pathname === '/api/v2/db/detail' && req.method === 'GET') {
     try {
       const { getRunDetail } = await import('../db/matrix.js');
@@ -909,6 +916,158 @@ export async function v2Router(req, res, pathname) {
         persisted = r.persisted || 0;
       }
       sendJson(res, 200, { success: true, cells: matrix.length, persisted });
+    } catch (err) { sendError(res, err, 400); }
+    return true;
+  }
+
+  // ── Multibagger Screener ──────────────────────────────────────────────────
+
+  // GET /api/v2/multibagger/universe — universe info + cache stats
+  if (pathname === '/api/v2/multibagger/universe' && req.method === 'GET') {
+    try {
+      const universe = getUniverseInfo();
+      const cache = getCacheStats();
+      sendJson(res, 200, { success: true, universe, cache });
+    } catch (err) { sendError(res, err, 500); }
+    return true;
+  }
+
+  // GET /api/v2/multibagger/fundamentals?symbol=NSE:TICKER — single snapshot + score
+  if (pathname === '/api/v2/multibagger/fundamentals' && req.method === 'GET') {
+    try {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const symbol = url.searchParams.get('symbol');
+      if (!symbol) throw new Error('symbol query param required');
+      const result = await scoreSymbol(symbol);
+      sendJson(res, 200, { success: true, ...result });
+    } catch (err) { sendError(res, err, 400); }
+    return true;
+  }
+
+  // GET /api/v2/multibagger/analysis?symbol=NSE:TICKER — full one-stop analysis
+  if (pathname === '/api/v2/multibagger/analysis' && req.method === 'GET') {
+    try {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const symbol = url.searchParams.get('symbol');
+      if (!symbol) throw new Error('symbol query param required');
+      const forceRefresh = url.searchParams.get('refresh') === '1';
+      const analysis = await generateAnalysis(symbol, { forceRefresh });
+      sendJson(res, 200, { success: true, analysis });
+    } catch (err) { sendError(res, err, 400); }
+    return true;
+  }
+
+  // GET /api/v2/stock/ownership?symbol=NSE:TICKER — shareholding + scores + MF
+  if (pathname === '/api/v2/stock/ownership' && req.method === 'GET') {
+    try {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const symbol = url.searchParams.get('symbol');
+      if (!symbol) throw new Error('symbol query param required');
+      const forceRefresh = url.searchParams.get('refresh') === '1';
+      const ownership = await getOwnership(symbol, { forceRefresh });
+      const flows = await fetchFiiDiiFlows().catch(() => null);
+      sendJson(res, 200, { success: true, ownership: { ...ownership, fiiDiiFlows: flows } });
+    } catch (err) { sendError(res, err, 400); }
+    return true;
+  }
+
+  // GET /api/v2/stock/news?symbol=NSE:TICKER&sector=... — stock + sector news
+  if (pathname === '/api/v2/stock/news' && req.method === 'GET') {
+    try {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const symbol = url.searchParams.get('symbol');
+      if (!symbol) throw new Error('symbol query param required');
+      const name = url.searchParams.get('name') || undefined;
+      const sector = url.searchParams.get('sector') || undefined;
+      const news = await getNews(symbol, { name, sector });
+      sendJson(res, 200, { success: true, news });
+    } catch (err) { sendError(res, err, 400); }
+    return true;
+  }
+
+  // GET /api/v2/market/fii-dii — market-wide daily FII/DII cash flows
+  if (pathname === '/api/v2/market/fii-dii' && req.method === 'GET') {
+    try {
+      const flows = await fetchFiiDiiFlows();
+      sendJson(res, 200, { success: true, flows });
+    } catch (err) { sendError(res, err, 500); }
+    return true;
+  }
+
+
+  // GET /api/v2/multibagger/presets — institutional screen preset definitions
+  if (pathname === '/api/v2/multibagger/presets' && req.method === 'GET') {
+    try {
+      const presets = Object.entries(SCREEN_PRESETS).map(([id, p]) => ({
+        id,
+        label: p.label,
+        description: p.description,
+        criteria: p.criteria.map(c => c.label),
+      }));
+      sendJson(res, 200, { success: true, presets });
+    } catch (err) { sendError(res, err, 500); }
+    return true;
+  }
+
+  // POST /api/v2/multibagger/screen — run the full screener
+  // Body: { universe?, filters?, topN?, concurrency?, preset? }
+  if (pathname === '/api/v2/multibagger/screen' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const result = await screenUniverse({
+        universe: body.universe || 'large_cap',
+        filters: body.filters || {},
+        topN: body.topN === 0 || body.topN === 'all' ? 0 : Math.min(Number(body.topN) || 0, 500),
+        concurrency: Math.min(Number(body.concurrency) || 4, 8),
+        preset: body.preset && SCREEN_PRESETS[body.preset] ? body.preset : null,
+      });
+      // Strip heavy snapshot data for list view (keep scores/flags)
+      const results = result.results.map(r => {
+        const { snapshot, ...rest } = r;
+        return {
+          ...rest,
+          pe: snapshot.pe,
+          roe: snapshot.roe,
+          roce: snapshot.roce,
+          roce5yAvg: snapshot.roce5yAvg,
+          operatingMargin: snapshot.operatingMargin,
+          opm5yAvg: snapshot.opm5yAvg,
+          peg: snapshot.peg,
+          debtToEquity: snapshot.debtToEquity,
+          netProfitYoY: snapshot.netProfitYoY,
+          netProfitQoQ: snapshot.netProfitQoQ,
+          revenueYoY: snapshot.revenueYoY,
+          revenueCAGR5y: snapshot.revenueCAGR5y,
+          epsCAGR5y: snapshot.epsCAGR5y,
+          canslimAccel: snapshot.canslimAccel,
+          marginTrend: snapshot.marginTrend,
+          ebitdaMargin: snapshot.ebitdaMargin,
+          earningsGrowth: snapshot.earningsGrowth,
+          consecutiveGrowthQuarters: snapshot.consecutiveGrowthQuarters,
+          sectorMedianPe: r.sectorMedianPe,
+          sectorMedianPb: r.sectorMedianPb,
+          peVsSector: (snapshot.pe && r.sectorMedianPe) ? +(snapshot.pe / r.sectorMedianPe).toFixed(2) : null,
+          presetFit: r.presetFit || null,
+        };
+      });
+      sendJson(res, 200, { success: true, results, meta: result.meta });
+    } catch (err) { sendError(res, err, 400); }
+    return true;
+  }
+
+  // POST /api/v2/multibagger/quick — quick screen on a basket
+  // Body: { basket?, topN? }
+  if (pathname === '/api/v2/multibagger/quick' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const result = await quickScreen(body.basket || 'large_cap', {
+        topN: body.topN === 0 || body.topN === 'all' ? 0 : Math.min(Number(body.topN) || 0, 100),
+      });
+      const results = result.results.map(r => {
+        const { snapshot, ...rest } = r;
+        return { ...rest, pe: snapshot.pe, roe: snapshot.roe, netProfitYoY: snapshot.netProfitYoY };
+      });
+      sendJson(res, 200, { success: true, results, meta: result.meta });
     } catch (err) { sendError(res, err, 400); }
     return true;
   }

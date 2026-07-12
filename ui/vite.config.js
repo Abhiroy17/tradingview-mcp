@@ -11,6 +11,15 @@ export default defineConfig({
   },
   build: {
     outDir: '../ui-dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          recharts: ['recharts'],
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          tanstack: ['@tanstack/react-query'],
+        }
+      }
+    }
   }
 });

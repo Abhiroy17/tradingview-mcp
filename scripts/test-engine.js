@@ -11,11 +11,11 @@
 import { runStrategy, STRATEGY_CODES } from '../src/engine/index.js';
 
 const TESTS = [
-  { code: 'rsi2_india_swing',         symbol: 'NSE:RELIANCE', timeframe: '1D' },
   { code: 'ibs_india_swing',          symbol: 'NSE:RELIANCE', timeframe: '1D' },
   { code: 'ibs_india_intraday',       symbol: 'NSE:RELIANCE', timeframe: '5m' },
   { code: 'fibonacci_india_swing',    symbol: 'NSE:HDFCBANK', timeframe: '1D' },
   { code: 'trend_200sma_positional',  symbol: 'NSE:TCS',      timeframe: '1D' },
+  { code: 'ema_rsi_intraday',         symbol: 'NSE:RELIANCE', timeframe: '1h' },
 ];
 
 console.log(`Registry has ${STRATEGY_CODES.length} strategies\n`);

@@ -26,6 +26,17 @@ i_volLen   = input.int(title = "Volume MA Length",   defval = 20, minval = 1, gr
 i_volMult  = input.float(title = "Volume Multiplier", defval = 1.0, minval = 0.0, step = 0.1, group="Filters")
 i_useShort = input.bool(title = "Allow Shorts", defval = true, group="Filters")
 
+// MACD Entry Confirm + RSI (Phase I opt-in)
+i_useMacd    = input.bool(title = "MACD Entry Confirm", defval = true, group="Filters",
+     tooltip="Require MACD histogram > 0 for long, < 0 for short.")
+i_useRsiEntry = input.bool(title = "RSI Entry Filter", defval = false, group="Filters")
+i_useRsiExit  = input.bool(title = "RSI Exit Override", defval = false, group="Filters")
+i_rsiLen      = input.int(title = "RSI Length", defval = 14, minval = 2, group="Filters")
+i_rsiEntryLng = input.int(title = "RSI Entry Long (≥)", defval = 50, minval = 30, group="Filters")
+i_rsiEntrySht = input.int(title = "RSI Entry Short (≤)", defval = 50, maxval = 70, group="Filters")
+i_rsiExitLng  = input.int(title = "RSI Exit Long (≥)", defval = 75, minval = 50, group="Filters")
+i_rsiExitSht  = input.int(title = "RSI Exit Short (≤)", defval = 25, maxval = 50, group="Filters")
+
 // ********** Strategy inputs - End **********
 
 
@@ -45,6 +56,14 @@ barInSession(sess) => time(timeframe.period, sess) != 0
 volMA = ta.sma(volume, i_volLen)
 volOK = volMA > 0 and volume > volMA * i_volMult
 
+// MACD + RSI (Phase I)
+[_macdLine, _sigLine, macdHist] = ta.macd(close, 12, 26, 9)
+rsiVal = ta.rsi(close, i_rsiLen)
+macdLongOK   = not i_useMacd or macdHist > 0
+macdShortOK  = not i_useMacd or macdHist < 0
+rsiEntryLong  = not i_useRsiEntry or rsiVal >= i_rsiEntryLng
+rsiEntryShort = not i_useRsiEntry or rsiVal <= i_rsiEntrySht
+
 colResistance = dir == 1 and dir == dir[1] ? color.new(color.red, 0) : color.new(color.red, 100)
 colSupport = dir == -1 and dir == dir[1] ? color.new(color.green, 0) : color.new(color.green, 100)
 
@@ -52,8 +71,8 @@ plot(superTrend, color = colResistance, linewidth=2)
 plot(superTrend, color = colSupport, linewidth=2)
 
 // Long/short on the Supertrend FLIP (cross), not every bar above/below it
-longCondition  = ta.crossover(close, superTrend)  and volOK
-shortCondition = ta.crossunder(close, superTrend) and volOK
+longCondition  = ta.crossover(close, superTrend)  and volOK and macdLongOK  and rsiEntryLong
+shortCondition = ta.crossunder(close, superTrend) and volOK and macdShortOK and rsiEntryShort
 
 // See if intraday session is active
 bool intradaySession = barInSession(i_marketSession)
@@ -78,6 +97,12 @@ if shortCondition and strategy.position_size > 0
     strategy.close("Long", comment = "ST flip")
 if longCondition and strategy.position_size < 0
     strategy.close("Short", comment = "ST flip")
+
+// ── RSI Exit Override (Phase I) ──────────────────────────────────────────
+if i_useRsiExit and strategy.position_size > 0 and rsiVal >= i_rsiExitLng
+    strategy.close("Long", comment = "RSI exit")
+if i_useRsiExit and strategy.position_size < 0 and rsiVal <= i_rsiExitSht
+    strategy.close("Short", comment = "RSI exit")
 
 // ── Session square-off (when session is over and position is open) ───────
 squareOff = (not intradaySession) and (strategy.position_size != 0)
