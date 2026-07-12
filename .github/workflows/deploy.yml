@@ -3,32 +3,80 @@ name: Deploy to Oracle Cloud
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  build-ui:
+    name: Build UI on runner
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to server
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build React UI
+        run: |
+          cd ui
+          npm ci
+          npm run build
+
+      - name: Upload UI build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: ui-dist/
+          retention-days: 1
+
+  deploy:
+    name: Deploy to server
+    needs: build-ui
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download UI build
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: ui-dist/
+
+      - name: Pull code and install backend deps
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.ORACLE_HOST }}
           username: ubuntu
           key: ${{ secrets.ORACLE_SSH_KEY }}
+          command_timeout: 15m
           script: |
             set -e
             cd ~/tradingview-mcp
-
             echo "Pulling latest code..."
             git pull origin master
+            echo "Installing backend deps (production only)..."
+            NODE_OPTIONS=--max-old-space-size=512 npm ci --omit=dev --no-audit --no-fund
 
-            echo "Installing dependencies..."
-            npm install --production=false
+      - name: Copy prebuilt UI to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          source: "ui-dist/"
+          target: "~/tradingview-mcp/"
+          overwrite: true
 
-            echo "Building React UI..."
-            cd ui && npm install && npm run build && cd ..
-
-            echo "Restarting dashboard..."
-            pm2 restart munafasutra
-
-            echo "Deploy complete ✓"
-            pm2 status
+      - name: Restart dashboard
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -e
+            cd ~/tradingview-mcp
+            pm2 restart munafasutra --update-env
+            pm2 save
+            echo "Deploy complete"
