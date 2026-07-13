@@ -46,6 +46,19 @@ async function primeCookies(force = false) {
   return _cookieJar;
 }
 
+/** Safely parse JSON from a response, throwing if HTML/non-JSON is returned. */
+async function safeJson(res) {
+  const text = await res.text();
+  if (text.trimStart().startsWith('<')) {
+    throw new Error(`NSE returned HTML (likely captcha/WAF block)`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`NSE JSON parse failed: ${e.message}`);
+  }
+}
+
 async function nseGet(pathAndQuery) {
   const cookie = await primeCookies();
   const url = NSE_BASE + pathAndQuery;
@@ -71,10 +84,10 @@ async function nseGet(pathAndQuery) {
       },
     });
     if (!retry.ok) throw new Error(`NSE ${retry.status}`);
-    return retry.json();
+    return safeJson(retry);
   }
   if (!res.ok) throw new Error(`NSE ${res.status}`);
-  return res.json();
+  return safeJson(res);
 }
 
 /**

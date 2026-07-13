@@ -449,6 +449,11 @@ export async function fetchFundamentals(symbol) {
     if (err.result) {
       data = err.result;
     } else {
+      // Detect HTML responses (captcha/consent pages) and provide clear error
+      const msg = err.message || '';
+      if (msg.includes('Unexpected token') && msg.includes('<')) {
+        throw new Error(`Yahoo returned HTML instead of JSON for ${symbol} (likely rate-limited or consent page)`);
+      }
       throw err;
     }
   }

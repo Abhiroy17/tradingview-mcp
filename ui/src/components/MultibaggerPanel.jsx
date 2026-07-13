@@ -5,7 +5,7 @@ import './MultibaggerPanel.css';
 
 const DEFAULT_FILTERS = {
   minPrice: 50,
-  minMarketCap: 500, // in Crores
+  minMarketCap: 1000, // in Crores
   maxDebtToEquity: '',
   minROE: '',
   minFScore: '',
@@ -115,6 +115,9 @@ export default function MultibaggerPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (!res.ok && res.headers.get('content-type')?.includes('text/html')) {
+        throw new Error(`Server error ${res.status} (likely restarting, try again)`);
+      }
       const data = await res.json();
       if (data.success) {
         setResults(data.results || []);
@@ -135,6 +138,9 @@ export default function MultibaggerPanel() {
     setAnalysis(null);
     try {
       const res = await fetch(`/api/v2/multibagger/analysis?symbol=${encodeURIComponent(symbol)}`);
+      if (!res.ok && res.headers.get('content-type')?.includes('text/html')) {
+        throw new Error(`Server error ${res.status}`);
+      }
       const data = await res.json();
       if (data.success) setAnalysis(data.analysis);
       else setError(data.error);

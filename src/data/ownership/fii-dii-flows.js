@@ -46,7 +46,10 @@ export async function fetchFiiDiiFlows() {
       },
     });
     if (!res.ok) throw new Error(`NSE ${res.status}`);
-    const arr = await res.json();
+    const text = await res.text();
+    if (text.trimStart().startsWith('<')) throw new Error('NSE returned HTML (likely captcha/WAF)');
+    let arr;
+    try { arr = JSON.parse(text); } catch (e) { throw new Error(`NSE JSON parse: ${e.message}`); }
     const norm = normalize(arr);
     if (norm) { _cache = norm; _cacheAt = Date.now(); }
     return norm;

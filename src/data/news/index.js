@@ -64,6 +64,10 @@ async function fetchFeed(queryStr) {
   const res = await fetch(buildUrl(queryStr), { headers: { 'User-Agent': UA } });
   if (!res.ok) throw new Error(`Google News ${res.status}`);
   const xml = await res.text();
+  // Detect non-RSS HTML responses (captcha/consent pages)
+  if (!xml.includes('<item>') && !xml.includes('<item ') && xml.includes('<!DOCTYPE')) {
+    throw new Error('Google News returned HTML instead of RSS (likely captcha)');
+  }
   return parseRss(xml).slice(0, 25);
 }
 

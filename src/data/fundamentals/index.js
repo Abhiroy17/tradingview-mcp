@@ -81,7 +81,10 @@ export async function getFundamentals(symbol, opts = {}) {
   }
 
   const data = await fetchFundamentals(symbol);
-  setCache(symbol, data);
+  // Don't cache obviously broken results (no price, no name = Yahoo returned garbage)
+  if (data && (data.price != null || data.name)) {
+    setCache(symbol, data);
+  }
   return data;
 }
 
@@ -146,7 +149,7 @@ export async function getFundamentalsMany(symbols, opts = {}) {
         consecutiveErrors++;
 
         // Rate limit detection — back off
-        if (msg.includes('429') || msg.includes('Too Many') || msg.includes('rate')) {
+        if (msg.includes('429') || msg.includes('Too Many') || msg.includes('rate') || msg.includes('HTML instead of JSON') || msg.includes('consent page')) {
           backoffMs = Math.min(maxBackoff, backoffMs * 2);
           // Re-queue the symbol for retry
           if (consecutiveErrors < 3) {
@@ -170,6 +173,13 @@ export async function getFundamentalsMany(symbols, opts = {}) {
   saveCache();
 
   return { results, errors };
+}
+
+/**
+ * Get the in-memory cache map (for use by universe-filter preSectorRestrict).
+ */
+export function getCacheMap() {
+  return loadCache();
 }
 
 /**

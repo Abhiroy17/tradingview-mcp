@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getHistorical } from '../providers/router.js';
+import { getCacheMap } from './index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', '..', '..', '.data');
@@ -22,7 +23,7 @@ const INSTRUMENTS_FILE = path.join(DATA_DIR, 'upstox-instruments.json');
 export const DEFAULT_FILTERS = Object.freeze({
   minPrice: 50,             // ₹50 hard penny-stock floor
   minDailyTurnover: 1e7,   // ₹1 Cr avg daily traded value
-  minMarketCap: 5e9,       // ₹500 Cr (applied post-fundamentals)
+  minMarketCap: 1e10,       // ₹1000 Cr (applied post-fundamentals)
   maxDebtToEquity: null,    // Optional: e.g. 200
   minROE: null,             // Optional: e.g. 10
   minFScore: null,          // Optional: e.g. 5
@@ -32,8 +33,11 @@ export const DEFAULT_FILTERS = Object.freeze({
 
 /**
  * Load the full NSE_EQ instrument universe from .data/upstox-instruments.json.
- * Returns array of canonical "NSE:TICKER" symbols.
+ * Returns array of canonical "NSE:TICKER" symbols. Cached after first load.
  */
+let _universeCache = null;
+let _universeCacheMtime = 0;
+
 export function loadNSEUniverse() {
   if (!fs.existsSync(INSTRUMENTS_FILE)) {
     throw new Error(
@@ -41,13 +45,16 @@ export function loadNSEUniverse() {
       `Run 'npm run upstox:instruments' to download the NSE instrument master.`
     );
   }
+  // Return cached if file hasn't changed
+  const mtime = fs.statSync(INSTRUMENTS_FILE).mtimeMs;
+  if (_universeCache && mtime === _universeCacheMtime) return _universeCache;
+
   const instruments = JSON.parse(fs.readFileSync(INSTRUMENTS_FILE, 'utf-8'));
   // instruments is a map: { "NSE:TICKER": { instrumentKey, name, ... } }
   // Filter to equity-only: exclude bonds/debentures (numeric prefixes like 756KA36, 736SBI39),
   // government securities, and other non-equity instruments
   const BOND_PATTERN = /^NSE:\d/; // Bonds/debentures start with digits (e.g., NSE:756KA36)
-  const EXCLUDE_SUFFIXES = /\d{2}$|[A-Z]\d{2}$/; // e.g., ends in two digits like "39", "36"
-  return Object.keys(instruments)
+  _universeCache = Object.keys(instruments)
     .filter(sym => sym.startsWith('NSE:'))
     .filter(sym => {
       const ticker = sym.slice(4);
@@ -57,6 +64,8 @@ export function loadNSEUniverse() {
       if (/^\d+[A-Z]+\d+$/.test(ticker)) return false;
       return true;
     });
+  _universeCacheMtime = mtime;
+  return _universeCache;
 }
 
 /**
@@ -159,7 +168,7 @@ export async function preFilterUniverse(symbols, filters = {}, opts = {}) {
  * @param {number} minMarketCap — in raw number (e.g. 5e9 for ₹500 Cr)
  * @returns {{passed: Map<string, object>, excluded: string[]}}
  */
-export function filterByMarketCap(fundamentals, minMarketCap = 5e9) {
+export function filterByMarketCap(fundamentals, minMarketCap = 1e10) {
   const passed = new Map();
   const excluded = [];
   for (const [sym, data] of fundamentals) {
@@ -182,13 +191,8 @@ export function filterByMarketCap(fundamentals, minMarketCap = 5e9) {
  * @returns {{restricted: string[], skippedByCacheMiss: number}}
  */
 export function preSectorRestrict(symbols, targetSector) {
-  const CACHE_FILE = path.join(DATA_DIR, 'fundamentals-cache.json');
-  let cache = {};
-  try {
-    if (fs.existsSync(CACHE_FILE)) {
-      cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
-    }
-  } catch { /* proceed without cache */ }
+  // Use in-memory cache (already loaded by fundamentals index) to avoid re-reading disk
+  const cache = getCacheMap();
 
   const restricted = [];
   let skippedByCacheMiss = 0;
