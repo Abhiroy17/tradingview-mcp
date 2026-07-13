@@ -9,14 +9,21 @@ export function useMultibaggerAnalysis(symbol, options = {}) {
     queryKey: ['multibagger', 'analysis', symbol],
     queryFn: async () => {
       const res = await fetch(`/api/v2/multibagger/analysis?symbol=${encodeURIComponent(symbol)}`);
-      if (!res.ok) throw new Error(`Analysis failed: ${res.statusText}`);
-      const data = await res.json();
+      if (!res.ok) throw new Error(`Analysis failed: ${res.status} ${res.statusText}`);
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Server returned invalid response. Please retry.');
+      }
       if (!data.success) throw new Error(data.error || 'Analysis failed');
       return data.analysis;
     },
     enabled: !!symbol,
     staleTime: 1000 * 60 * 10, // 10 min — fundamental data doesn't change fast
     gcTime: 1000 * 60 * 30,    // 30 min cache
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     ...options,
   });
 }
@@ -35,14 +42,21 @@ export function useMultibaggerScreen(basket, filters, options = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(`Screen failed: ${res.statusText}`);
-      const data = await res.json();
+      if (!res.ok) throw new Error(`Screen failed: ${res.status} ${res.statusText}`);
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Server returned invalid response. Please retry.');
+      }
       if (!data.success) throw new Error(data.error || 'Screen failed');
       return data;
     },
     enabled: !!basket,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
+    retry: 1,
+    retryDelay: 3000,
     ...options,
   });
 }

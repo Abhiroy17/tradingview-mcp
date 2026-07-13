@@ -67,7 +67,27 @@ function findYoYQuarter(series, i) {
  * @returns {Promise<object>} Full analysis payload
  */
 export async function generateAnalysis(symbol, opts = {}) {
-  const snap = await getFundamentals(symbol, { forceRefresh: opts.forceRefresh });
+  let snap;
+  try {
+    snap = await getFundamentals(symbol, { forceRefresh: opts.forceRefresh });
+  } catch (e) {
+    // Return a minimal error payload instead of crashing
+    return {
+      success: false,
+      symbol,
+      error: `Failed to fetch fundamentals: ${e.message}`,
+      header: { symbol, name: null, tier: 'unknown', multibaggerScore: 0 },
+    };
+  }
+  if (!snap || (!snap.price && !snap.name)) {
+    return {
+      success: false,
+      symbol,
+      error: 'No fundamental data available for this symbol',
+      header: { symbol, name: snap?.name || null, tier: 'unknown', multibaggerScore: 0 },
+    };
+  }
+
   const sectorMedians = opts.sectorMedians?.get(snap.sector) || null;
   const scored = scoreFundamentals(snap, sectorMedians);
   const fscoreResult = computeFScore(snap);
@@ -126,14 +146,14 @@ export async function generateAnalysis(symbol, opts = {}) {
     const hasPBT = q.pretaxIncome != null;
     return {
       ...q,
-      revenueQoQ: hasRev && prev?.revenue ? Math.round(((q.revenue - prev.revenue) / Math.abs(prev.revenue)) * 100) : null,
-      revenueYoY: hasRev && sameQLastYear?.revenue ? Math.round(((q.revenue - sameQLastYear.revenue) / Math.abs(sameQLastYear.revenue)) * 100) : null,
-      netIncomeQoQ: hasNI && prev?.netIncome ? Math.round(((q.netIncome - prev.netIncome) / Math.abs(prev.netIncome)) * 100) : null,
-      netIncomeYoY: hasNI && sameQLastYear?.netIncome ? Math.round(((q.netIncome - sameQLastYear.netIncome) / Math.abs(sameQLastYear.netIncome)) * 100) : null,
-      ebitdaQoQ: hasEbitda && prev?.ebitda ? Math.round(((q.ebitda - prev.ebitda) / Math.abs(prev.ebitda)) * 100) : null,
-      ebitdaYoY: hasEbitda && sameQLastYear?.ebitda ? Math.round(((q.ebitda - sameQLastYear.ebitda) / Math.abs(sameQLastYear.ebitda)) * 100) : null,
-      pbtQoQ: hasPBT && prev?.pretaxIncome ? Math.round(((q.pretaxIncome - prev.pretaxIncome) / Math.abs(prev.pretaxIncome)) * 100) : null,
-      pbtYoY: hasPBT && sameQLastYear?.pretaxIncome ? Math.round(((q.pretaxIncome - sameQLastYear.pretaxIncome) / Math.abs(sameQLastYear.pretaxIncome)) * 100) : null,
+      revenueQoQ: hasRev && prev?.revenue && prev.revenue !== 0 ? Math.round(((q.revenue - prev.revenue) / Math.abs(prev.revenue)) * 100) : null,
+      revenueYoY: hasRev && sameQLastYear?.revenue && sameQLastYear.revenue !== 0 ? Math.round(((q.revenue - sameQLastYear.revenue) / Math.abs(sameQLastYear.revenue)) * 100) : null,
+      netIncomeQoQ: hasNI && prev?.netIncome && prev.netIncome !== 0 ? Math.round(((q.netIncome - prev.netIncome) / Math.abs(prev.netIncome)) * 100) : null,
+      netIncomeYoY: hasNI && sameQLastYear?.netIncome && sameQLastYear.netIncome !== 0 ? Math.round(((q.netIncome - sameQLastYear.netIncome) / Math.abs(sameQLastYear.netIncome)) * 100) : null,
+      ebitdaQoQ: hasEbitda && prev?.ebitda && prev.ebitda !== 0 ? Math.round(((q.ebitda - prev.ebitda) / Math.abs(prev.ebitda)) * 100) : null,
+      ebitdaYoY: hasEbitda && sameQLastYear?.ebitda && sameQLastYear.ebitda !== 0 ? Math.round(((q.ebitda - sameQLastYear.ebitda) / Math.abs(sameQLastYear.ebitda)) * 100) : null,
+      pbtQoQ: hasPBT && prev?.pretaxIncome && prev.pretaxIncome !== 0 ? Math.round(((q.pretaxIncome - prev.pretaxIncome) / Math.abs(prev.pretaxIncome)) * 100) : null,
+      pbtYoY: hasPBT && sameQLastYear?.pretaxIncome && sameQLastYear.pretaxIncome !== 0 ? Math.round(((q.pretaxIncome - sameQLastYear.pretaxIncome) / Math.abs(sameQLastYear.pretaxIncome)) * 100) : null,
       opmChange: prev && q.opm != null && prev.opm != null ? q.opm - prev.opm : null,
       npmChange: prev && q.npm != null && prev.npm != null ? q.npm - prev.npm : null,
       ebitdaMarginChange: prev && q.ebitdaMargin != null && prev.ebitdaMargin != null ? +(q.ebitdaMargin - prev.ebitdaMargin).toFixed(1) : null,

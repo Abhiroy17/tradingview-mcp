@@ -169,8 +169,10 @@ export async function getFundamentalsMany(symbols, opts = {}) {
   const workers = Array.from({ length: Math.min(concurrency, toFetch.length) }, () => worker());
   await Promise.all(workers);
 
-  // Final cache save
-  saveCache();
+  // Final cache save (non-fatal — don't lose results on disk write failure)
+  try { saveCache(); } catch (e) {
+    console.error('[fundamentals] final cache save failed (results still returned):', e.message);
+  }
 
   return { results, errors };
 }

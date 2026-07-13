@@ -952,7 +952,12 @@ export async function v2Router(req, res, pathname) {
       if (!symbol) throw new Error('symbol query param required');
       const forceRefresh = url.searchParams.get('refresh') === '1';
       const analysis = await generateAnalysis(symbol, { forceRefresh });
-      sendJson(res, 200, { success: true, analysis });
+      // generateAnalysis returns { success: false, error } on graceful failure
+      if (analysis && analysis.success === false) {
+        sendJson(res, 200, { success: false, error: analysis.error, analysis: analysis });
+      } else {
+        sendJson(res, 200, { success: true, analysis });
+      }
     } catch (err) { sendError(res, err, 400); }
     return true;
   }
@@ -1022,31 +1027,32 @@ export async function v2Router(req, res, pathname) {
         preset: body.preset && SCREEN_PRESETS[body.preset] ? body.preset : null,
       });
       // Strip heavy snapshot data for list view (keep scores/flags)
-      const results = result.results.map(r => {
+      const results = (result.results || []).map(r => {
         const { snapshot, ...rest } = r;
+        const s = snapshot || {};
         return {
           ...rest,
-          pe: snapshot.pe,
-          roe: snapshot.roe,
-          roce: snapshot.roce,
-          roce5yAvg: snapshot.roce5yAvg,
-          operatingMargin: snapshot.operatingMargin,
-          opm5yAvg: snapshot.opm5yAvg,
-          peg: snapshot.peg,
-          debtToEquity: snapshot.debtToEquity,
-          netProfitYoY: snapshot.netProfitYoY,
-          netProfitQoQ: snapshot.netProfitQoQ,
-          revenueYoY: snapshot.revenueYoY,
-          revenueCAGR5y: snapshot.revenueCAGR5y,
-          epsCAGR5y: snapshot.epsCAGR5y,
-          canslimAccel: snapshot.canslimAccel,
-          marginTrend: snapshot.marginTrend,
-          ebitdaMargin: snapshot.ebitdaMargin,
-          earningsGrowth: snapshot.earningsGrowth,
-          consecutiveGrowthQuarters: snapshot.consecutiveGrowthQuarters,
-          sectorMedianPe: r.sectorMedianPe,
-          sectorMedianPb: r.sectorMedianPb,
-          peVsSector: (snapshot.pe && r.sectorMedianPe) ? +(snapshot.pe / r.sectorMedianPe).toFixed(2) : null,
+          pe: s.pe ?? null,
+          roe: s.roe ?? null,
+          roce: s.roce ?? null,
+          roce5yAvg: s.roce5yAvg ?? null,
+          operatingMargin: s.operatingMargin ?? null,
+          opm5yAvg: s.opm5yAvg ?? null,
+          peg: s.peg ?? null,
+          debtToEquity: s.debtToEquity ?? null,
+          netProfitYoY: s.netProfitYoY ?? null,
+          netProfitQoQ: s.netProfitQoQ ?? null,
+          revenueYoY: s.revenueYoY ?? null,
+          revenueCAGR5y: s.revenueCAGR5y ?? null,
+          epsCAGR5y: s.epsCAGR5y ?? null,
+          canslimAccel: s.canslimAccel ?? null,
+          marginTrend: s.marginTrend ?? null,
+          ebitdaMargin: s.ebitdaMargin ?? null,
+          earningsGrowth: s.earningsGrowth ?? null,
+          consecutiveGrowthQuarters: s.consecutiveGrowthQuarters ?? null,
+          sectorMedianPe: r.sectorMedianPe ?? null,
+          sectorMedianPb: r.sectorMedianPb ?? null,
+          peVsSector: (s.pe && r.sectorMedianPe) ? +(s.pe / r.sectorMedianPe).toFixed(2) : null,
           presetFit: r.presetFit || null,
         };
       });
@@ -1063,9 +1069,10 @@ export async function v2Router(req, res, pathname) {
       const result = await quickScreen(body.basket || 'large_cap', {
         topN: body.topN === 0 || body.topN === 'all' ? 0 : Math.min(Number(body.topN) || 0, 100),
       });
-      const results = result.results.map(r => {
+      const results = (result.results || []).map(r => {
         const { snapshot, ...rest } = r;
-        return { ...rest, pe: snapshot.pe, roe: snapshot.roe, netProfitYoY: snapshot.netProfitYoY };
+        const s = snapshot || {};
+        return { ...rest, pe: s.pe ?? null, roe: s.roe ?? null, netProfitYoY: s.netProfitYoY ?? null };
       });
       sendJson(res, 200, { success: true, results, meta: result.meta });
     } catch (err) { sendError(res, err, 400); }

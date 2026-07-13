@@ -118,12 +118,17 @@ export default function MultibaggerPanel() {
       if (!res.ok && res.headers.get('content-type')?.includes('text/html')) {
         throw new Error(`Server error ${res.status} (likely restarting, try again)`);
       }
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        throw new Error(`Invalid response from server (${res.status}). Please retry.`);
+      }
       if (data.success) {
-        setResults(data.results || []);
+        setResults(Array.isArray(data.results) ? data.results : []);
         setProgress({ message: `Done: ${data.results?.length || 0} results from ${data.meta?.scored || 0} scored`, phase: 'complete' });
       } else {
-        setError(data.error || 'Screen failed');
+        setError(data.error || 'Screen failed — server returned an error');
       }
     } catch (e) {
       setError(e.message);
@@ -141,9 +146,14 @@ export default function MultibaggerPanel() {
       if (!res.ok && res.headers.get('content-type')?.includes('text/html')) {
         throw new Error(`Server error ${res.status}`);
       }
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        throw new Error(`Invalid response from server. Please retry.`);
+      }
       if (data.success) setAnalysis(data.analysis);
-      else setError(data.error);
+      else setError(data.error || 'Analysis failed');
     } catch (e) {
       setError(e.message);
     } finally {
@@ -203,8 +213,15 @@ export default function MultibaggerPanel() {
       </div>
 
       {/* Progress / Error */}
-      {progress && <div className="mb-progress">{progress.message}</div>}
-      {error && <div className="mb-error">⚠️ {error}</div>}
+      {progress && !error && <div className="mb-progress">{progress.message}</div>}
+      {error && (
+        <div className="mb-error">
+          ⚠️ {error}
+          <button className="mb-retry-btn" onClick={() => { setError(null); runScreen(); }} style={{ marginLeft: 12, padding: '4px 12px', cursor: 'pointer' }}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Results Grid */}
       {results.length > 0 && !selectedSymbol && (

@@ -178,20 +178,30 @@ export async function screenUniverse(opts = {}) {
   onProgress?.({ phase: 'resolve', total: symbols.length, message: `Universe: ${symbols.length} symbols` });
 
   // ── Step 2: Pre-filter (price + liquidity) ────────────────────────────
-  const { eligible, excluded: preExcluded } = await preFilterUniverse(
-    symbols,
-    { minPrice: mergedFilters.minPrice, minDailyTurnover: mergedFilters.minDailyTurnover },
-    {
-      concurrency: 8,
-      onProgress: (p) => onProgress?.({
-        phase: 'prefilter',
-        done: p.done,
-        total: p.total,
-        passed: p.passed,
-        message: `Pre-filter: ${p.done}/${p.total} checked, ${p.passed} eligible`,
-      }),
-    }
-  );
+  let eligible, preExcluded;
+  try {
+    const pfResult = await preFilterUniverse(
+      symbols,
+      { minPrice: mergedFilters.minPrice, minDailyTurnover: mergedFilters.minDailyTurnover },
+      {
+        concurrency: 8,
+        onProgress: (p) => onProgress?.({
+          phase: 'prefilter',
+          done: p.done,
+          total: p.total,
+          passed: p.passed,
+          message: `Pre-filter: ${p.done}/${p.total} checked, ${p.passed} eligible`,
+        }),
+      }
+    );
+    eligible = pfResult.eligible;
+    preExcluded = pfResult.excluded;
+  } catch (e) {
+    // Pre-filter failed (e.g. data provider down) — proceed with full symbol list
+    console.error('[screener] pre-filter failed, using full universe:', e.message);
+    eligible = symbols;
+    preExcluded = [];
+  }
 
   onProgress?.({ phase: 'prefilter_done', eligible: eligible.length, excluded: preExcluded.length });
 
@@ -227,28 +237,29 @@ export async function screenUniverse(opts = {}) {
   // ── Step 6: Score all ─────────────────────────────────────────────────
   const scored = [];
   for (const [sym, snap] of mcapFiltered) {
-    const medians = sectorMedians.get(snap.sector || 'Unknown') || null;
-    const result = scoreFundamentals(snap, medians);
+    try {
+      const medians = sectorMedians.get(snap.sector || 'Unknown') || null;
+      const result = scoreFundamentals(snap, medians);
 
-    // Sector gate — if scanning a sector universe, skip non-matching stocks
-    if (sectorFilter && !industryPatterns && snap.sector !== sectorFilter) continue;
-    // Industry gate — if scanning an industry-based sector, match on industry keywords
-    if (industryPatterns && snap.industry) {
-      const ind = snap.industry.toLowerCase();
-      if (!industryPatterns.some(p => ind.includes(p.toLowerCase()))) continue;
-    } else if (industryPatterns && !snap.industry) {
-      continue; // No industry data — skip
-    }
+      // Sector gate — if scanning a sector universe, skip non-matching stocks
+      if (sectorFilter && !industryPatterns && snap.sector !== sectorFilter) continue;
+      // Industry gate — if scanning an industry-based sector, match on industry keywords
+      if (industryPatterns && snap.industry) {
+        const ind = snap.industry.toLowerCase();
+        if (!industryPatterns.some(p => ind.includes(p.toLowerCase()))) continue;
+      } else if (industryPatterns && !snap.industry) {
+        continue; // No industry data — skip
+      }
 
-    // Apply hard filters
-    if (mergedFilters.maxDebtToEquity != null && snap.debtToEquity > mergedFilters.maxDebtToEquity) continue;
-    if (mergedFilters.minROE != null && (snap.roe == null || snap.roe < mergedFilters.minROE)) continue;
-    if (mergedFilters.minFScore != null && result.fScore < mergedFilters.minFScore) continue;
-    if (mergedFilters.maxPE != null && snap.pe != null && snap.pe > mergedFilters.maxPE) continue;
-    if (mergedFilters.turnaroundOnly && snap.netProfitQoQ != null && snap.netProfitQoQ < 30) continue;
+      // Apply hard filters
+      if (mergedFilters.maxDebtToEquity != null && snap.debtToEquity > mergedFilters.maxDebtToEquity) continue;
+      if (mergedFilters.minROE != null && (snap.roe == null || snap.roe < mergedFilters.minROE)) continue;
+      if (mergedFilters.minFScore != null && result.fScore < mergedFilters.minFScore) continue;
+      if (mergedFilters.maxPE != null && snap.pe != null && snap.pe > mergedFilters.maxPE) continue;
+      if (mergedFilters.turnaroundOnly && snap.netProfitQoQ != null && snap.netProfitQoQ < 30) continue;
 
-    // Skip insufficient data
-    if (snap.dataCompleteness < 30) continue;
+      // Skip insufficient data
+      if (snap.dataCompleteness < 30) continue;
 
     // Preset soft-boost: rank matching stocks higher without excluding others
     let presetFit = null;
@@ -264,6 +275,10 @@ export async function screenUniverse(opts = {}) {
     }
 
     scored.push({ ...result, snapshot: snap, sectorMedianPe: medians?.pe || null, sectorMedianPb: medians?.pb || null, presetFit });
+    } catch (e) {
+      // Single stock scoring failure should never kill the entire screen
+      continue;
+    }
   }
 
   // ── Step 7: Rank (return all, no topN cap) ────────────────────────────

@@ -32,12 +32,14 @@ export const DEFAULT_WEIGHTS = Object.freeze({
 
 function clamp(v, min = 0, max = 100) { return Math.max(min, Math.min(max, v)); }
 function normalize(v, low, high) {
-  if (v == null) return 50; // neutral if missing
+  if (v == null || !isFinite(v)) return 50; // neutral if missing/invalid
+  if (high === low) return 50; // avoid division by zero
   return clamp(((v - low) / (high - low)) * 100);
 }
 function invertNormalize(v, low, high) {
   // Lower is better (e.g. P/E, debt/equity)
-  if (v == null) return 50;
+  if (v == null || !isFinite(v)) return 50;
+  if (high === low) return 50; // avoid division by zero
   return clamp(100 - ((v - low) / (high - low)) * 100);
 }
 
@@ -160,7 +162,7 @@ function scoreValuation(snap, sectorMedians) {
   }
 
   // Earnings yield vs risk-free rate proxy (inverse P/E > 5% = attractive)
-  if (snap.pe != null && snap.pe > 0) {
+  if (snap.pe != null && isFinite(snap.pe) && snap.pe > 0) {
     const earningsYield = (1 / snap.pe) * 100; // in %
     scores.push(normalize(earningsYield, 1, 15)); // 1% yield = bad, 15% = great
     weights.push(1);
