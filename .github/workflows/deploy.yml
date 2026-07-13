@@ -1,13 +1,22 @@
-name: Deploy to Oracle Cloud
+name: CI — Build UI
+
+# Deployment is handled by a pull-based cron job on the server
+# (scripts/server-deploy.sh polls origin/master every 2 minutes and
+# self-updates). GitHub-hosted runners intermittently cannot complete the
+# TCP handshake to the small Oracle free-tier instance, so inbound-SSH
+# deploys are unreliable. This workflow now only validates that the UI
+# builds cleanly on every push.
 
 on:
   push:
+    branches: [master]
+  pull_request:
     branches: [master]
   workflow_dispatch:
 
 jobs:
   build-ui:
-    name: Build UI on runner
+    name: Build UI (validation)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,61 +32,3 @@ jobs:
           cd ui
           npm ci
           npm run build
-
-      - name: Upload UI build
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-dist
-          path: ui-dist/
-          retention-days: 1
-
-  deploy:
-    name: Deploy to server
-    needs: build-ui
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download UI build
-        uses: actions/download-artifact@v4
-        with:
-          name: ui-dist
-          path: ui-dist/
-
-      - name: Pull code and install backend deps
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.ORACLE_HOST }}
-          username: ubuntu
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          timeout: 60s
-          command_timeout: 15m
-          script: |
-            set -e
-            cd ~/tradingview-mcp
-            echo "Pulling latest code..."
-            git pull origin master
-            echo "Installing backend deps (production only)..."
-            NODE_OPTIONS=--max-old-space-size=512 npm ci --omit=dev --no-audit --no-fund
-
-      - name: Copy prebuilt UI to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.ORACLE_HOST }}
-          username: ubuntu
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          source: "ui-dist/"
-          target: "~/tradingview-mcp/"
-          overwrite: true
-
-      - name: Restart dashboard
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.ORACLE_HOST }}
-          username: ubuntu
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          command_timeout: 5m
-          script: |
-            set -e
-            cd ~/tradingview-mcp
-            pm2 restart munafasutra --update-env
-            pm2 save
-            echo "Deploy complete"
