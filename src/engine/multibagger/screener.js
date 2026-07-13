@@ -146,10 +146,27 @@ export async function screenUniverse(opts = {}) {
         symbols = dbSymbols;
         onProgress?.({ phase: 'sector_restrict', total: dbSymbols.length, restricted: dbSymbols.length, uncached: 0, source: 'database', message: `Industry ${universe}: ${dbSymbols.length} from DB` });
       } else {
-        // Fallback: full universe, filter post-fundamentals
-        const fullUniverse = loadNSEUniverse();
-        symbols = fullUniverse;
-        onProgress?.({ phase: 'sector_restrict', total: fullUniverse.length, restricted: fullUniverse.length, uncached: fullUniverse.length, source: 'full_scan', message: `Industry ${universe}: full scan (no cached data)` });
+        // Fallback: use fundamentals cache to find matching industry symbols
+        const cache = getCacheMap();
+        const cachedMatches = [];
+        const patterns = industryPatterns.map(p => p.toLowerCase());
+        for (const [sym, snap] of Object.entries(cache)) {
+          if (!sym.startsWith('NSE:')) continue;
+          if (snap?.industry) {
+            const ind = snap.industry.toLowerCase();
+            if (patterns.some(p => ind.includes(p))) cachedMatches.push(sym);
+          }
+        }
+        if (cachedMatches.length > 0) {
+          // Found matches in cache — use those + a small sample of uncached for discovery
+          symbols = cachedMatches;
+          onProgress?.({ phase: 'sector_restrict', total: cachedMatches.length, restricted: cachedMatches.length, uncached: 0, source: 'cache', message: `Industry ${universe}: ${cachedMatches.length} from cache` });
+        } else {
+          // No cache either — fall back to full universe (first-time scan)
+          const fullUniverse = loadNSEUniverse();
+          symbols = fullUniverse;
+          onProgress?.({ phase: 'sector_restrict', total: fullUniverse.length, restricted: fullUniverse.length, uncached: fullUniverse.length, source: 'full_scan', message: `Industry ${universe}: full scan (no cached data)` });
+        }
       }
     } else if (sectorFilter) {
       // GICS sector-based — query DB by sector
