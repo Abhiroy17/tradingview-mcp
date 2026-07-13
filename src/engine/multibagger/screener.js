@@ -5,7 +5,7 @@
  *           promoter/institutional enrich → re-flag → final ranked list.
  */
 
-import { getFundamentals, getFundamentalsMany } from '../../data/fundamentals/index.js';
+import { getFundamentals, getFundamentalsMany, getCacheMap } from '../../data/fundamentals/index.js';
 import { loadNSEUniverse, preFilterUniverse, filterByMarketCap, preSectorRestrict, DEFAULT_FILTERS } from '../../data/fundamentals/universe-filter.js';
 import { scoreFundamentals, computeSectorMedians } from './scorer.js';
 import { getBasket, BASKETS, isSectorUniverse, getSectorLabel, getIndustryMatch } from '../baskets.js';
@@ -204,6 +204,24 @@ export async function screenUniverse(opts = {}) {
   }
 
   onProgress?.({ phase: 'prefilter_done', eligible: eligible.length, excluded: preExcluded.length });
+
+  // ── Step 2b: Early market-cap exclusion using cached data ─────────────
+  // Symbols with KNOWN market cap below threshold (from prior screens) are
+  // skipped before the expensive Yahoo API call. Uncached symbols pass through.
+  const minMcap = mergedFilters.minMarketCap;
+  if (minMcap) {
+    const cache = getCacheMap();
+    const beforeCount = eligible.length;
+    eligible = eligible.filter(sym => {
+      const cached = cache[sym];
+      if (!cached || cached.marketCap == null) return true; // unknown — keep
+      return cached.marketCap >= minMcap;
+    });
+    const earlyExcluded = beforeCount - eligible.length;
+    if (earlyExcluded > 0) {
+      onProgress?.({ phase: 'early_mcap', excluded: earlyExcluded, remaining: eligible.length, message: `Early mcap filter: skipped ${earlyExcluded} (cached below ₹${Math.round(minMcap / 1e7)} Cr)` });
+    }
+  }
 
   // ── Step 3: Fetch fundamentals ────────────────────────────────────────
   const { results: fundamentalsMap, errors } = await getFundamentalsMany(eligible, {
