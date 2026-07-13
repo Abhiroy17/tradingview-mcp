@@ -9,7 +9,7 @@ import { getFundamentals, getFundamentalsMany, getCacheMap } from '../../data/fu
 import { loadNSEUniverse, preFilterUniverse, filterByMarketCap, preSectorRestrict, DEFAULT_FILTERS } from '../../data/fundamentals/universe-filter.js';
 import { scoreFundamentals, computeSectorMedians } from './scorer.js';
 import { getBasket, BASKETS, isSectorUniverse, getSectorLabel, getIndustryMatch } from '../baskets.js';
-import { getSymbolsBySector, getSymbolsByIndustry } from '../../db/symbols-query.js';
+import { getSymbolsBySector, getSymbolsByIndustry, preFilterSymbols } from '../../db/symbols-query.js';
 
 const CR = 1e7; // 1 crore in rupees
 
@@ -194,8 +194,64 @@ export async function screenUniverse(opts = {}) {
 
   onProgress?.({ phase: 'resolve', total: symbols.length, message: `Universe: ${symbols.length} symbols` });
 
+  // ── Step 1b: DB pre-filter (fast elimination via stored fundamentals) ──
+  // If DB has data, apply ALL common filters in one SQL query to dramatically
+  // reduce the number of expensive Yahoo API calls needed.
+  let dbPreFiltered = null;
+  if (symbols.length > 20) { // skip for small baskets
+    const dbFilters = {
+      symbols: symbols,
+      minMarketCap: mergedFilters.minMarketCap || undefined,
+      minPrice: mergedFilters.minPrice || undefined,
+      maxDebtToEquity: mergedFilters.maxDebtToEquity != null ? mergedFilters.maxDebtToEquity : undefined,
+      minROE: mergedFilters.minROE || undefined,
+      maxPE: mergedFilters.maxPE || undefined,
+    };
+    // Add sector/industry from the universe filter if not already sector-restricted
+    if (sectorFilter && !industryPatterns) dbFilters.sector = sectorFilter;
+    if (industryPatterns) dbFilters.industryPatterns = industryPatterns;
+
+    dbPreFiltered = await preFilterSymbols(dbFilters);
+    if (dbPreFiltered && dbPreFiltered.length > 0) {
+      // DB had data — use its filtered list. Also include symbols NOT in DB at all
+      // (never refreshed) so first-time discoveries aren't missed.
+      const dbSet = new Set(dbPreFiltered);
+
+      // Find symbols that are in our universe but NOT returned by the DB query.
+      // These are either: (a) in DB but failed filters, or (b) not in DB at all.
+      // We want to keep (b) for discovery but exclude (a).
+      const notInResult = symbols.filter(s => !dbSet.has(s));
+
+      // Quick check: which of these actually exist in DB (have data_refreshed_at)?
+      let discoverySyms = [];
+      if (notInResult.length > 0) {
+        const existsInDb = await preFilterSymbols({ symbols: notInResult });
+        if (existsInDb !== null) {
+          // Symbols NOT returned even with no filters = not in DB at all → discovery
+          const existsSet = new Set(existsInDb);
+          discoverySyms = notInResult.filter(s => !existsSet.has(s));
+        } else {
+          // DB call failed — include a sample for safety
+          discoverySyms = notInResult.slice(0, 50);
+        }
+      }
+
+      const beforeCount = symbols.length;
+      symbols = [...dbPreFiltered, ...discoverySyms];
+      const dbExcluded = beforeCount - symbols.length;
+      onProgress?.({ phase: 'db_prefilter', excluded: dbExcluded, remaining: symbols.length, discovery: discoverySyms.length, source: 'database', message: `DB pre-filter: ${dbExcluded} eliminated, ${symbols.length} remain (${discoverySyms.length} new)` });
+    }
+  }
+
   // ── Step 2: Pre-filter (price + liquidity) ────────────────────────────
+  // Skip if DB pre-filter already handled price filtering
   let eligible, preExcluded;
+  if (dbPreFiltered && dbPreFiltered.length > 0) {
+    // DB already filtered by price + mcap — skip expensive OHLCV pre-filter
+    eligible = symbols;
+    preExcluded = [];
+    onProgress?.({ phase: 'prefilter_done', eligible: eligible.length, excluded: 0, message: 'Pre-filter skipped (DB handled)' });
+  } else {
   try {
     const pfResult = await preFilterUniverse(
       symbols,
@@ -221,6 +277,7 @@ export async function screenUniverse(opts = {}) {
   }
 
   onProgress?.({ phase: 'prefilter_done', eligible: eligible.length, excluded: preExcluded.length });
+  }
 
   // ── Step 2b: Early market-cap exclusion using cached data ─────────────
   // Symbols with KNOWN market cap below threshold (from prior screens) are
@@ -336,6 +393,7 @@ export async function screenUniverse(opts = {}) {
     results: topResults,
     meta: {
       universeSize: symbols.length,
+      dbPreFiltered: dbPreFiltered ? dbPreFiltered.length : null,
       preFiltered: eligible.length,
       fundamentalsFetched: fundamentalsMap.size,
       fundamentalsErrors: errors.size,

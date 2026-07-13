@@ -36,6 +36,7 @@ import { openPanel } from './src/core/ui.js';
 import { setTimeframe as chartSetTimeframe } from './src/core/chart.js';
 import { v2Router } from './src/api/v2.js';
 import { maybeAutoStart as schedulerMaybeAutoStart, stopScheduler } from './src/engine/scheduler.js';
+import { startFundamentalsRefresh, getFundamentalsRefreshStatus, runFundamentalsRefreshNow } from './src/engine/fundamentals-refresh.js';
 import { isNseSessionBar } from './src/engine/india-session.js';
 import { scanMatrix as engineScanMatrix } from './src/engine/scanner.js';
 import {
@@ -6180,6 +6181,15 @@ server.listen(PORT, () => {
     else if (out?.reason) console.log(`[scheduler] not started: ${out.reason}`);
   } catch (err) {
     console.warn('[scheduler] failed to auto-start:', err.message);
+  }
+
+  // Auto-start fundamentals refresh — keeps symbols table fresh for DB pre-filtering.
+  try {
+    const out = startFundamentalsRefresh();
+    if (out?.ok) console.log('[fundamentals-refresh] auto-started (batch:', out.batch, 'every', out.intervalMin, 'min)');
+    else if (out?.reason) console.log(`[fundamentals-refresh] not started: ${out.reason}`);
+  } catch (err) {
+    console.warn('[fundamentals-refresh] failed to auto-start:', err.message);
   }
 
   // DB keepalive — prevent Supabase from pausing due to inactivity (ping every 3 hours)

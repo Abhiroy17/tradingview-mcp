@@ -32,6 +32,7 @@
     "upstox:instruments": "node scripts/upstox-instruments.js",
     "db:migrate": "node scripts/db-migrate.js",
     "db:seed-symbols": "node scripts/seed-symbols.js",
+    "db:refresh-fundamentals": "node scripts/refresh-fundamentals.js",
     "ownership:isin-map": "node scripts/build-isin-map.js",
     "ownership:refresh": "node scripts/refresh-ownership.js",
     "ownership:ingest-amfi": "node scripts/ingest-amfi.js",

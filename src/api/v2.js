@@ -920,6 +920,37 @@ export async function v2Router(req, res, pathname) {
     return true;
   }
 
+  // ──────────────────────────────────────────────────────────────────
+  // Fundamentals Refresh (DB pre-population for fast screening)
+  // ──────────────────────────────────────────────────────────────────
+
+  // GET /api/v2/fundamentals-refresh/status
+  if (pathname === '/api/v2/fundamentals-refresh/status' && req.method === 'GET') {
+    try {
+      const { getFundamentalsRefreshStatus } = await import('../engine/fundamentals-refresh.js');
+      const { getRefreshStats } = await import('../db/symbols-query.js');
+      const status = getFundamentalsRefreshStatus();
+      const dbStats = await getRefreshStats();
+      sendJson(res, 200, { success: true, status, dbStats });
+    } catch (err) { sendError(res, err, 500); }
+    return true;
+  }
+
+  // POST /api/v2/fundamentals-refresh/run-now — trigger immediate refresh cycle
+  if (pathname === '/api/v2/fundamentals-refresh/run-now' && req.method === 'POST') {
+    try {
+      const { runFundamentalsRefreshNow } = await import('../engine/fundamentals-refresh.js');
+      const body = await readBody(req).catch(() => ({}));
+      const result = await runFundamentalsRefreshNow({
+        batch: body.batch ? Number(body.batch) : undefined,
+        staleHours: body.staleHours ? Number(body.staleHours) : undefined,
+        concurrency: body.concurrency ? Number(body.concurrency) : undefined,
+      });
+      sendJson(res, 200, { success: true, result });
+    } catch (err) { sendError(res, err, 500); }
+    return true;
+  }
+
   // ── Multibagger Screener ──────────────────────────────────────────────────
 
   // GET /api/v2/multibagger/universe — universe info + cache stats

@@ -220,6 +220,55 @@ INSERT INTO schema_migrations (version) VALUES ('2026_07_symbols_enrich')
 ON CONFLICT (version) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────
+-- Migration: symbols fundamentals columns (pre-filter without Yahoo API)
+-- Stores key screening metrics so the screener can eliminate stocks early
+-- via a single DB query, avoiding expensive Yahoo calls for ineligible symbols.
+-- ─────────────────────────────────────────────────────────────────────
+
+-- Valuation
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS pe NUMERIC(10,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS pb NUMERIC(10,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS peg NUMERIC(10,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS ev_to_ebitda NUMERIC(10,2);
+
+-- Profitability
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS roe NUMERIC(8,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS roce NUMERIC(8,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS operating_margin NUMERIC(8,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS net_margin NUMERIC(8,2);
+
+-- Growth
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS revenue_cagr_3y NUMERIC(8,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS eps_cagr_3y NUMERIC(8,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS revenue_growth_qoq NUMERIC(8,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS eps_growth_yoy NUMERIC(8,2);
+
+-- Balance sheet
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS debt_to_equity NUMERIC(8,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS current_ratio NUMERIC(8,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS interest_coverage NUMERIC(10,2);
+
+-- Ownership
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS promoter_holding NUMERIC(7,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS fii_holding NUMERIC(7,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS dii_holding NUMERIC(7,2);
+
+-- Misc
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS fifty_two_week_high NUMERIC(18,6);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS fifty_two_week_low NUMERIC(18,6);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS free_cashflow NUMERIC(20,2);
+ALTER TABLE symbols ADD COLUMN IF NOT EXISTS data_refreshed_at TIMESTAMPTZ;
+
+-- Indexes for common filter queries
+CREATE INDEX IF NOT EXISTS idx_symbols_market_cap ON symbols(market_cap DESC) WHERE active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_symbols_industry ON symbols(industry) WHERE active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_symbols_roe ON symbols(roe DESC NULLS LAST) WHERE active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_symbols_de ON symbols(debt_to_equity) WHERE active = TRUE AND debt_to_equity IS NOT NULL;
+
+INSERT INTO schema_migrations (version) VALUES ('2026_07_symbols_fundamentals')
+ON CONFLICT (version) DO NOTHING;
+
+-- ─────────────────────────────────────────────────────────────────────
 -- Watchlist — user-curated symbols, unique per symbol
 -- ─────────────────────────────────────────────────────────────────────
 
