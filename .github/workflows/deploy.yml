@@ -48,6 +48,7 @@ jobs:
           host: ${{ secrets.ORACLE_HOST }}
           username: ubuntu
           key: ${{ secrets.ORACLE_SSH_KEY }}
+          timeout: 60s
           command_timeout: 15m
           script: |
             set -e
