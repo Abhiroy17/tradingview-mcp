@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ChartLineUp, Eye, Rocket, Target, Bell, ClockCounterClockwise, Flask, Robot, Gear } from 'phosphor-react';
+import { ChartLineUp, Eye, Rocket, Target, Bell, ClockCounterClockwise, Flask, Robot, Gear, ChartBar } from 'phosphor-react';
 import './Header.css';
 
 export default function Header({ connected, monitoring }) {
@@ -17,6 +17,7 @@ export default function Header({ connected, monitoring }) {
     { to: '/', label: 'Dashboard', Icon: ChartLineUp },
     { to: '/watchlist', label: 'Watchlist', Icon: Eye },
     { to: '/multibagger', label: 'Multibagger', Icon: Rocket },
+    { to: '/earnings', label: 'Earnings', Icon: ChartBar },
     { to: '/matrix', label: 'Strategy Matrix', Icon: Target },
     { to: '/alerts', label: 'Price Alerts', Icon: Bell },
     { to: '/history', label: 'Trade History', Icon: ClockCounterClockwise },

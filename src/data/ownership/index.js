@@ -13,6 +13,7 @@ import { fetchNseShareholding } from './nse-shareholding.js';
 import { fetchTrendlyneOwnership, trendlyneEnabled } from './trendlyne.js';
 import { getMfHoldingsForSymbol } from './amfi.js';
 import { deriveOwnershipScores } from './scores.js';
+import { getFundamentals } from '../fundamentals/index.js';
 
 const FRESH_MS = 7 * 24 * 60 * 60 * 1000; // shareholding updates quarterly → 7d fresh
 
@@ -47,6 +48,43 @@ export async function getOwnership(symbol, opts = {}) {
     const stale = await readFromDb(symbol);
     if (stale) return await enrichWithMf(symbol, { ...stale, stale: true });
   }
+
+  // 4) Final fallback: Yahoo majorHoldersBreakdown (limited but always available)
+  try {
+    const snap = await getFundamentals(symbol);
+    const yOwn = snap?.yahooOwnership;
+    if (yOwn && (yOwn.insidersPercentHeld != null || yOwn.institutionsPercentHeld != null)) {
+      const yahooBlock = {
+        quarter: null,
+        promoterHolding: yOwn.insidersPercentHeld,
+        fiiHolding: yOwn.institutionsPercentHeld,
+        diiHolding: null,
+        mutualFundHolding: null,
+        insuranceHolding: null,
+        hniHolding: null,
+        retailHolding: null,
+        govtHolding: null,
+        pledgedPct: null,
+        changes: {},
+        promoterTrend: null,
+        institutionalTrend: null,
+        smartMoneyScore: null,
+        institutionalAccumScore: null,
+        promoterConfidenceScore: null,
+        institutionsCount: yOwn.institutionsCount,
+        superstars: [],
+        history: [],
+        source: 'yahoo',
+        stale: false,
+        updatedAt: snap.fetchedAt || new Date().toISOString(),
+        available: true,
+      };
+      return await enrichWithMf(symbol, yahooBlock);
+    }
+  } catch (e) {
+    if (process.env.OWNERSHIP_DEBUG) console.error(`[ownership] yahoo fallback ${symbol}: ${e.message}`);
+  }
+
   return empty;
 }
 

@@ -14,6 +14,7 @@ import PineLab from './components/PineLab/PineLab.jsx';
 import StrategyMatrixView from './components/StrategyMatrix/StrategyMatrixView.jsx';
 import AiAgentPanel from './components/AiAgentPanel.jsx';
 import MultibaggerPanel from './components/MultibaggerPanel.jsx';
+import EarningsReport from './components/EarningsReport.jsx';
 import { useSSE } from './hooks/useSSE.js';
 import { useApi } from './hooks/useApi.js';
 import './App.css';
@@ -146,6 +147,7 @@ export default function App() {
         } />
         <Route path="/watchlist" element={<main className="main-content"><WatchlistPanel api={api} /></main>} />
         <Route path="/multibagger" element={<main className="main-content"><MultibaggerPanel /></main>} />
+        <Route path="/earnings" element={<main className="main-content"><EarningsReport /></main>} />
         <Route path="/matrix" element={<main className="main-content"><StrategyMatrixView /></main>} />
         <Route path="/alerts" element={<main className="main-content"><PriceAlerts api={api} currentPrice={status.price} symbol={status.symbol} /></main>} />
         <Route path="/history" element={<main className="main-content"><TradeHistory trades={tradeHistory} /></main>} />

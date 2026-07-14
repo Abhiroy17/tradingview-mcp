@@ -1,14 +1,15 @@
 /**
  * NSE shareholding-pattern provider (official source).
  *
- * NSE gates its JSON APIs behind session cookies + browser-like headers. We
- * prime a session by hitting the homepage, then query the corporate
- * shareholding-pattern endpoint. Output is normalized to holding-percentage
- * buckets per quarter.
+ * NSE gates its JSON APIs behind Akamai Bot Manager (_abck cookie requires JS
+ * challenge solving). Simple HTTP clients cannot bypass this. The provider
+ * attempts the request and gracefully returns null on failure — callers fall
+ * back to DB cache / Yahoo Finance / Trendlyne.
  *
- * This is best-effort: NSE occasionally changes payload shapes / blocks
- * automated access. On any failure we return null and let callers fall back to
- * cache / Trendlyne / manual.
+ * NOTE (July 2026): NSE has tightened bot protection. The /api/corp-info endpoint
+ * now returns 404 without a valid _abck token. This provider will succeed only
+ * when running behind a proxy that solves Akamai challenges, or if NSE relaxes
+ * their WAF. The Yahoo fallback in ownership/index.js provides limited coverage.
  */
 
 const NSE_BASE = 'https://www.nseindia.com';

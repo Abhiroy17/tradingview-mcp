@@ -126,7 +126,7 @@ export const SECTOR_UNIVERSES = Object.freeze({
   sec_insurance:        { label: 'Insurance',               industryMatch: ['Insurance'] },
   sec_it:               { label: 'IT - Software',           industryMatch: ['Software', 'Information Technology'] },
   sec_logistics:        { label: 'Logistics',               industryMatch: ['Integrated Freight', 'Marine Shipping', 'Trucking'] },
-  sec_media:            { label: 'Media & Entertainment',   industryMatch: ['Entertainment', 'Broadcasting', 'Publishing', 'Advertising'] },
+  sec_media:            { label: 'Media & Entertainment',   industryMatch: ['Entertainment', 'Broadcasting', 'Publishing', 'Advertising', 'Internet Content'] },
   sec_mining:           { label: 'Mining & Minerals',       industryMatch: ['Mining', 'Industrial Metals'] },
   sec_packaging:        { label: 'Packaging',               industryMatch: ['Packaging'] },
   sec_paper:            { label: 'Paper',                   industryMatch: ['Paper', 'Forest Products'] },
