@@ -140,33 +140,34 @@ export async function screenUniverse(opts = {}) {
     industryPatterns = getIndustryMatch(universe);
 
     if (industryPatterns) {
-      // Industry-based sector (Zerodha India-specific) — query DB by industry keywords
+      // Industry-based sector (Zerodha India-specific) — query DB + cache together.
+      // DB symbols table may have NULL industry for some stocks (not yet refreshed),
+      // so always supplement with fundamentals cache matches to avoid missing stocks.
       const dbSymbols = await getSymbolsByIndustry(industryPatterns);
-      if (dbSymbols && dbSymbols.length > 0) {
-        symbols = dbSymbols;
-        onProgress?.({ phase: 'sector_restrict', total: dbSymbols.length, restricted: dbSymbols.length, uncached: 0, source: 'database', message: `Industry ${universe}: ${dbSymbols.length} from DB` });
+      const cache = getCacheMap();
+      const patterns = industryPatterns.map(p => p.toLowerCase());
+      const cachedMatches = [];
+      for (const [sym, snap] of Object.entries(cache)) {
+        if (!sym.startsWith('NSE:')) continue;
+        if (snap?.industry) {
+          const ind = snap.industry.toLowerCase();
+          if (patterns.some(p => ind.includes(p))) cachedMatches.push(sym);
+        }
+      }
+
+      // Merge DB + cache results (deduplicated)
+      const merged = new Set([...(dbSymbols || []), ...cachedMatches]);
+      if (merged.size > 0) {
+        symbols = [...merged];
+        const dbCount = dbSymbols?.length || 0;
+        const cacheExtra = merged.size - dbCount;
+        const source = dbCount > 0 && cacheExtra > 0 ? 'database+cache' : dbCount > 0 ? 'database' : 'cache';
+        onProgress?.({ phase: 'sector_restrict', total: merged.size, restricted: merged.size, uncached: cacheExtra, source, message: `Industry ${universe}: ${merged.size} symbols (${dbCount} DB + ${cacheExtra} cache)` });
       } else {
-        // Fallback: use fundamentals cache to find matching industry symbols
-        const cache = getCacheMap();
-        const cachedMatches = [];
-        const patterns = industryPatterns.map(p => p.toLowerCase());
-        for (const [sym, snap] of Object.entries(cache)) {
-          if (!sym.startsWith('NSE:')) continue;
-          if (snap?.industry) {
-            const ind = snap.industry.toLowerCase();
-            if (patterns.some(p => ind.includes(p))) cachedMatches.push(sym);
-          }
-        }
-        if (cachedMatches.length > 0) {
-          // Found matches in cache — use those + a small sample of uncached for discovery
-          symbols = cachedMatches;
-          onProgress?.({ phase: 'sector_restrict', total: cachedMatches.length, restricted: cachedMatches.length, uncached: 0, source: 'cache', message: `Industry ${universe}: ${cachedMatches.length} from cache` });
-        } else {
-          // No cache either — fall back to full universe (first-time scan)
-          const fullUniverse = loadNSEUniverse();
-          symbols = fullUniverse;
-          onProgress?.({ phase: 'sector_restrict', total: fullUniverse.length, restricted: fullUniverse.length, uncached: fullUniverse.length, source: 'full_scan', message: `Industry ${universe}: full scan (no cached data)` });
-        }
+        // No matches anywhere — fall back to full universe (first-time scan)
+        const fullUniverse = loadNSEUniverse();
+        symbols = fullUniverse;
+        onProgress?.({ phase: 'sector_restrict', total: fullUniverse.length, restricted: fullUniverse.length, uncached: fullUniverse.length, source: 'full_scan', message: `Industry ${universe}: full scan (no cached data)` });
       }
     } else if (sectorFilter) {
       // GICS sector-based — query DB by sector
